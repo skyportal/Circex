@@ -587,6 +587,12 @@ def _parse_pipe_row(
             err = float(err_m.group())
     lim_m = _PIPE_LIMIT_RE.search(by.get("mag", ""))
     limit = float(lim_m.group("lim")) if lim_m else None
+    if limit is None:
+        # "> 24.3": a table states a non-detection as an inequality rather than
+        # spelling out the word the cell pattern above looks for.
+        bound = re.fullmatch(r"[><]\s*(\d{1,2}\.\d{1,4})", by.get("mag", "").strip())
+        if bound:
+            limit = float(bound.group(1))
     if mag is None and limit is None:
         return None
     # Filter: "Rc (Vega)" -> "Rc" -> R. Require a recognized, mappable filter.

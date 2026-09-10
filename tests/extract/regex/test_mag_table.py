@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC
+
 import pytest
 
 from circex.extract.regex.mag_table import (
@@ -525,3 +527,40 @@ def test_a_confidence_limit_does_not_invent_a_sigma():
     (row,) = parse_single_mags(text)
     assert row.limiting_mag == 20.0
     assert row.limiting_mag_sigma is None
+
+
+def test_a_pipe_table_states_a_limit_as_an_inequality():
+    """GCN 45545: VLT limits written "> 24.3" in the magnitude column."""
+    from datetime import datetime
+
+    from circex.extract.regex.mag_table import parse_pipe_table_with_spans
+
+    body = (
+        "| Band | Mid time (UT) | T-T0 (hr) | Exposure time (min) | Instrument | Magnitude (AB) |\n"
+        "| - | -------------- | ------ | -- | ---------- | ------ |\n"
+        "| z | 2026 Sep 10.21 | 17.65  | 20 | VLT/FORS2  | > 24.3 |\n"
+        "| J | 2026 Sep 10.20 | 17.56  |  8 | VLT/HAWK-I | > 23.6 |\n"
+    )
+    rows = [
+        p
+        for p, _ in parse_pipe_table_with_spans(
+            body, trigger_time=datetime(2026, 9, 9, 11, 17, 46, tzinfo=UTC)
+        )
+    ]
+    assert [r.filter for r in rows] == ["z", "J"]
+    assert [r.limiting_mag for r in rows] == [24.3, 23.6]
+    assert all(r.is_detection is False for r in rows)
+    assert all(r.mag is None for r in rows)
+
+
+def test_a_pipe_magnitude_is_still_read_as_a_detection():
+    from circex.extract.regex.mag_table import parse_pipe_table_with_spans
+
+    body = (
+        "| Band | Mid time (UT) | Magnitude |\n"
+        "| - | - | - |\n"
+        "| r | 2026 Sep 10.21 | 19.78 +/- 0.05 |\n"
+    )
+    (row,) = [p for p, _ in parse_pipe_table_with_spans(body)]
+    assert row.mag == 19.78 and row.mag_error == 0.05
+    assert row.limiting_mag is None
