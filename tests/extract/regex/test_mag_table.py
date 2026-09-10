@@ -606,3 +606,24 @@ def test_band_prose_under_a_limit_clause_is_a_non_detection():
     )
     assert row.limiting_mag == 20.5 and row.mag is None
     assert row.is_detection is False
+
+
+def test_down_to_a_limit_makes_the_value_a_non_detection():
+    """GCN 19270: "did not detect any source ... down to a limit of R~23.3 mag"."""
+    from circex.extract.regex.mag_table import parse_single_mags
+
+    (row,) = parse_single_mags(
+        "We did not detect any source at the afterglow position down to a limit of R~23.3 mag."
+    )
+    assert row.limiting_mag == 23.3 and row.mag is None
+    assert row.is_detection is False
+
+
+def test_a_bare_limit_word_still_does_not_demote_a_detection():
+    """Only "down to a/the limit" counts; "limit" alone stays too loose."""
+    from circex.extract.regex.mag_table import parse_single_mags
+
+    (row,) = parse_single_mags(
+        "The detector limit is not relevant here; we measure R = 19.40 +/- 0.05."
+    )
+    assert row.mag == 19.40 and row.limiting_mag is None

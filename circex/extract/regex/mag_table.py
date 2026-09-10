@@ -64,7 +64,9 @@ _FILTER_TOKEN = (
 # sentence does not turn a real detection into a non-detection.
 _LIMIT_CLAUSE_RE = re.compile(
     r"(?:(?P<sigma>\d+(?:\.\d+)?)\s*[-\s]?\s*sigma\s+)?"
-    r"(?:upper[-\s]?limits?|limiting\s+magnitudes?|non[-\s]?detections?)"
+    r"(?:upper[-\s]?limits?|limiting\s+magnitudes?|non[-\s]?detections?"
+    # bare "limit" is too loose, but "down to a limit of" is not
+    r"|down\s+to\s+(?:a|the)\s+limit)"
     r"[^.;:]*[:\s]\s*$",
     re.IGNORECASE,
 )
