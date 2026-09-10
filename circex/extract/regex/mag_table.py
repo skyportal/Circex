@@ -83,6 +83,24 @@ _BARE_LIMIT_RE = re.compile(
     re.IGNORECASE,
 )
 
+# "an r'-band magnitude of 22.1 +/- 0.1", "the i-band magnitude is about 21.8":
+# the band names the measurement from in front rather than sitting beside the
+# value. The phrase welds the two together, so there is no pairing to guess.
+_BAND_PROSE_RE = re.compile(
+    rf"""
+    (?<![A-Za-z])
+    (?P<filter>{_FILTER_TOKEN})
+    \s*[-\s]?\s*band\s+
+    (?:AB\s+|Vega\s+)?
+    (?:magnitudes?|mag|brightness)\s+
+    (?:of|is|was|=|:)\s*
+    (?:about\s+|approximately\s+|around\s+|~\s*)*
+    (?P<mag>\d{{1,2}}\.\d{{1,3}})
+    (?:\s*(?:±|\+/[-−]|\+[-−])\s*(?P<err>\d+\.\d+))?
+    """,
+    re.VERBOSE | re.IGNORECASE,
+)
+
 # "in R-band", "the r' filter": the band a bare limit refers to.
 _BAND_CONTEXT_RE = re.compile(
     rf"(?<![A-Za-z])(?P<filter>{_FILTER_TOKEN})\s*[-\s]?\s*(?:band|filter)\b",
@@ -383,6 +401,42 @@ def parse_single_mags_with_spans(text: str) -> list[tuple[PhotometryExt, Span]]:
                     mag_error=float(match.group("err")),
                     mag_system=infer_mag_system(base),
                     bandpass=infer_bandpass(base),
+                ),
+                Span(start=match.start(), end=match.end(), snippet=match.group(0)),
+            )
+        )
+
+    # Band-before-value prose ("an r'-band magnitude of 22.1 +/- 0.1").
+    for match in _BAND_PROSE_RE.finditer(text):
+        if any(s < match.end() and match.start() < e for s, e in consumed):
+            continue
+        if _in_ranges(match.start(), excluded):
+            continue
+        raw = match.group("filter")
+        filter_name = raw if raw in _KNOWN_FILTERS else normalize_filter(raw)
+        if filter_name not in _KNOWN_FILTERS:
+            continue
+        mag = float(match.group("mag"))
+        if not _plausible_mag(filter_name, mag):
+            continue
+        err = float(match.group("err")) if match.group("err") else None
+        limit_clause = _LIMIT_CLAUSE_RE.search(_clause_before(text, match.start()))
+        consumed.append((match.start(), match.end()))
+        rows.append(
+            (
+                PhotometryExt(
+                    filter=filter_name,
+                    mag=None if limit_clause else mag,
+                    mag_error=None if limit_clause else err,
+                    limiting_mag=mag if limit_clause else None,
+                    limiting_mag_sigma=(
+                        float(limit_clause.group("sigma"))
+                        if limit_clause and limit_clause.group("sigma")
+                        else None
+                    ),
+                    is_detection=not limit_clause,
+                    mag_system=infer_mag_system(filter_name),
+                    bandpass=infer_bandpass(filter_name),
                 ),
                 Span(start=match.start(), end=match.end(), snippet=match.group(0)),
             )

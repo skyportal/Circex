@@ -574,3 +574,35 @@ def test_uppercase_Y_is_the_nir_band_and_lowercase_y_the_optical_one():
     assert infer_bandpass("y") == "ps1::y"
     assert infer_mag_system("Y") == "Vega"
     assert infer_mag_system("y") == "AB"
+
+
+def test_a_band_naming_its_magnitude_from_in_front_is_read():
+    """ "an r'-band magnitude of 22.1 +/- 0.1": the band qualifies, not sits beside."""
+    from circex.extract.regex.mag_table import parse_single_mags
+
+    (row,) = parse_single_mags(
+        "We estimate a preliminary r'-band magnitude of 22.1 +/- 0.1 calibrated against GROND."
+    )
+    assert (row.filter, row.mag, row.mag_error) == ("r", 22.1, 0.1)
+    assert row.is_detection is True
+
+
+def test_band_prose_reads_brightness_and_an_approximate_value():
+    from circex.extract.regex.mag_table import parse_single_mags
+
+    rows = parse_single_mags(
+        "The afterglow had an R-band brightness of 20.08 mag. "
+        "The i-band magnitude is about 21.8 mag."
+    )
+    assert [(r.filter, r.mag) for r in rows] == [("R", 20.08), ("i", 21.8)]
+
+
+def test_band_prose_under_a_limit_clause_is_a_non_detection():
+    """GCN 20714: "The upper limit of the measured g-band magnitudes is 20.5"."""
+    from circex.extract.regex.mag_table import parse_single_mags
+
+    (row,) = parse_single_mags(
+        "The upper limit of the measured g-band magnitudes is 20.5 (AB mag, 3sigma)."
+    )
+    assert row.limiting_mag == 20.5 and row.mag is None
+    assert row.is_detection is False
