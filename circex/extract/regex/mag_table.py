@@ -28,7 +28,9 @@ _UNFILTERED = ("unfiltered", "clear", "CR", "CV")
 
 _SLOAN: Final[frozenset[str]] = frozenset({"u", "g", "r", "i", "z", "y"})
 _BESSEL: Final[frozenset[str]] = frozenset({"U", "B", "V", "R", "I"})
-_NIR: Final[frozenset[str]] = frozenset({"J", "H", "K", "Ks"})
+# Y is the NIR band near 1.02 um, distinct from the Sloan/PS1 y near 0.96 um
+# that the lowercase token means. Case is the only thing telling them apart.
+_NIR: Final[frozenset[str]] = frozenset({"Y", "J", "H", "K", "Ks"})
 
 _HST: Final[frozenset[str]] = frozenset(
     {"F450W", "F555W", "F606W", "F702W", "F775W", "F814W", "F850LP", "F160W", "F110W"}
@@ -54,7 +56,7 @@ _FILTER_TOKEN = (
     r"|" + "|".join(_SVOM_VT) + r""
     r"|" + "|".join(_UVOT) + r""
     r"|" + "|".join(_UNFILTERED) + r""
-    r"|[UBVRI]c|[ugriz][p" + _PRIMES + r"]|[UBVRIJHKgrizyuCW]s?)"
+    r"|[UBVRI]c|[ugriz][p" + _PRIMES + r"]|[UBVRIJHKYgrizyuCW]s?)"
 )
 
 # "5-sigma upper limit: J = 19.07" states a limit in the syntax of a detection.
@@ -232,6 +234,9 @@ _BANDPASS_CROSSWALK: Final[dict[str, str]] = {
     "F125W": "f125w",
     "F160W": "f160w",
     # 2MASS / NIR (Vega)
+    # sncosmo carries no NIR Y, so this approximates it with the PS1 y that
+    # sits ~60 nm blueward. Revisit once a Y band lands upstream.
+    "Y": "ps1::y",
     "J": "2massj",
     "H": "2massh",
     "K": "2massks",

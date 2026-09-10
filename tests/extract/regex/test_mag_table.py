@@ -564,3 +564,13 @@ def test_a_pipe_magnitude_is_still_read_as_a_detection():
     (row,) = [p for p, _ in parse_pipe_table_with_spans(body)]
     assert row.mag == 19.78 and row.mag_error == 0.05
     assert row.limiting_mag is None
+
+
+def test_uppercase_Y_is_the_nir_band_and_lowercase_y_the_optical_one():
+    """Case is the only thing separating HAWK-I Y from PS1 y."""
+    from circex.extract.regex.mag_table import infer_bandpass, infer_mag_system
+
+    assert infer_bandpass("Y") == "ps1::y"
+    assert infer_bandpass("y") == "ps1::y"
+    assert infer_mag_system("Y") == "Vega"
+    assert infer_mag_system("y") == "AB"
