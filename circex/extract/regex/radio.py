@@ -89,6 +89,14 @@ _COMPARATIVE_RE = re.compile(
 )
 _CLAUSE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+(?=[A-Z(])")
 
+# "a 10 GHz flux density of ~5.5 mJy", "the 1390 MHz band flux density of...":
+# the frequency qualifies the anchor from in front. Only "band" may intervene,
+# so a frequency merely earlier in the clause is not mistaken for this one's.
+_ADJACENT_FREQ_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(GHz|MHz)(?:\s+bands?)?[\s-]*$", re.IGNORECASE)
+# "17/21 GHz flux density < 42 uJy" states one value over a pair of frequencies.
+# Which one it belongs to is not recoverable, so the shortcut declines it.
+_FREQ_LIST_TAIL_RE = re.compile(r"[\d.]\s*(?:/|,|&|\band\b)\s*$", re.IGNORECASE)
+
 # One value with a unit of its own, anchoring a single-measurement line.
 _LINE_FREQ_FIRST_RE = re.compile(
     r"^\s*(?P<freq>\d+(?:\.\d+)?)\s*(?P<fu>GHz|MHz)\s*[:=]?\s*"
@@ -231,13 +239,25 @@ def _parse_clause(
         values = _values(segment[anchor_end : units[0].start()])
         if not values:
             continue
-        # Frequencies stated after the anchor, else the clause's own — accepted
-        # only when the counts line up, which is what makes "respectively" safe.
-        freqs = _frequencies(segment)
-        if len(freqs) != len(values):
-            freqs = clause_freqs
-        if len(freqs) != len(values):
-            continue
+        # A frequency qualifying the anchor from in front binds to this one
+        # measurement, and stops the segment's reach into the next one's.
+        span_end = end
+        leading = _ADJACENT_FREQ_RE.search(clause[: anchor.start()])
+        if leading is not None and _FREQ_LIST_TAIL_RE.search(clause[: leading.start()]):
+            leading = None
+        if leading is not None and len(values) == 1:
+            scale = 1.0e-3 if leading.group(2).lower() == "mhz" else 1.0
+            freqs = [float(leading.group(1)) * scale]
+            span_end = anchor.start() + units[0].end()
+        else:
+            # Frequencies stated after the anchor, else the clause's own —
+            # accepted only when the counts line up, which is what makes
+            # "respectively" safe.
+            freqs = _frequencies(segment)
+            if len(freqs) != len(values):
+                freqs = clause_freqs
+            if len(freqs) != len(values):
+                continue
 
         is_limit = "limit" in anchor.group(0).lower()
         sigma_match = _SIGMA_RE.search(segment) or _SIGMA_RE.search(clause)
@@ -249,8 +269,8 @@ def _parse_clause(
                     _row(ghz, unit, value, error, is_limit, sigma),
                     Span(
                         start=base + anchor.start(),
-                        end=base + end,
-                        snippet=clause[anchor.start() : end],
+                        end=base + span_end,
+                        snippet=clause[anchor.start() : span_end],
                     ),
                 )
             )

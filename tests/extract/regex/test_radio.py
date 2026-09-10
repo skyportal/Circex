@@ -351,3 +351,50 @@ def test_an_unambiguous_measure_is_unchanged(text: str, measure: str | None) -> 
     result = parse_redshift(text)
     assert result is not None
     assert result.redshift_measure == measure
+
+
+def test_a_frequency_stated_before_the_anchor_binds_to_its_own_measurement():
+    """GCN 45547: "a 10 GHz flux density of ~5.5 mJy and a 104.5 GHz ... of ~50 mJy"."""
+    from circex.extract.regex.radio import parse_radio_with_spans
+
+    body = (
+        "From a preliminary analysis, we detect a bright radio source with a "
+        "10 GHz flux density of ~5.5 mJy and a 104.5 GHz flux density of ~50 mJy."
+    )
+    rows = [r for r, _ in parse_radio_with_spans(body)]
+    assert [(r.frequency_ghz, r.flux_density) for r in rows] == [(10.0, 5.5), (104.5, 50.0)]
+    assert all(r.is_detection for r in rows)
+
+
+def test_a_distributive_respectively_clause_still_pairs_in_order():
+    """The leading-frequency rule must not disturb trailing "respectively" lists."""
+    from circex.extract.regex.radio import parse_radio_with_spans
+
+    body = (
+        "We measure flux densities of 170 +/- 30 and 150 +/- 20 microJy/beam "
+        "at 6 and 10 GHz, respectively."
+    )
+    rows = [r for r, _ in parse_radio_with_spans(body)]
+    assert [(r.frequency_ghz, r.flux_density) for r in rows] == [(6.0, 170.0), (10.0, 150.0)]
+
+
+def test_a_frequency_qualifying_the_anchor_may_carry_the_word_band():
+    """GCN 15002: "The 1390 MHz band flux density ... is 792+/-44 uJy"."""
+    from circex.extract.regex.radio import parse_radio_with_spans
+
+    body = (
+        "The 1390 MHz band flux density of the afterglow is 792+/-44 uJy and "
+        "610 MHz flux density of the afterglow is 457+/-75 uJy."
+    )
+    rows = [r for r, _ in parse_radio_with_spans(body)]
+    assert [(round(r.frequency_ghz, 2), r.flux_density) for r in rows] == [
+        (1.39, 792.0),
+        (0.61, 457.0),
+    ]
+
+
+def test_one_value_over_a_pair_of_frequencies_is_declined():
+    """GCN 21900: "17/21 GHz flux density < 42 uJy" names no single frequency."""
+    from circex.extract.regex.radio import parse_radio_with_spans
+
+    assert parse_radio_with_spans("17/21 GHz flux density < 42 uJy") == []
