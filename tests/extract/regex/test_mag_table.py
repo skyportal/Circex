@@ -627,3 +627,33 @@ def test_a_bare_limit_word_still_does_not_demote_a_detection():
         "The detector limit is not relevant here; we measure R = 19.40 +/- 0.05."
     )
     assert row.mag == 19.40 and row.limiting_mag is None
+
+
+def test_a_limiting_mag_needs_no_trailing_mag_word():
+    """GCN 45549: "with a limiting mag of ~20.5" -- the anchor names the unit."""
+    from circex.extract.regex.mag_table import parse_single_mags
+
+    (row,) = parse_single_mags(
+        "We did not detect any new source in our clear coadd images with a "
+        "limiting mag of ~20.5 at a mid time of 31.5 min after the burst."
+    )
+    assert row.filter == "clear"
+    assert row.limiting_mag == 20.5 and row.is_detection is False
+
+
+def test_an_unfiltered_token_is_its_own_band_context():
+    from circex.extract.regex.mag_table import parse_single_mags
+
+    (row,) = parse_single_mags(
+        "We found no source in the combined unfiltered image down to a "
+        "3 sigma limiting magnitude of 18.5."
+    )
+    assert row.filter == "unfiltered"
+    assert (row.limiting_mag, row.limiting_mag_sigma) == (18.5, 3.0)
+
+
+def test_a_bare_upper_limit_without_mag_is_still_not_a_magnitude():
+    """An X-ray limit in counts/s must not become photometry."""
+    from circex.extract.regex.mag_table import parse_single_mags
+
+    assert parse_single_mags("In the R-band we place a 3-sigma upper limit of 12.5 counts/s.") == []

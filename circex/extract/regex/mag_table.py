@@ -103,6 +103,19 @@ _BAND_PROSE_RE = re.compile(
     re.VERBOSE | re.IGNORECASE,
 )
 
+# "with a limiting mag of ~20.5": the anchor names the unit itself, so unlike
+# _BARE_LIMIT_RE there is no trailing "mag" to demand -- an X-ray limit in
+# counts/s is never introduced as a limiting magnitude.
+_LIMITING_MAG_RE = re.compile(
+    r"(?:(?P<sigma>\d+(?:\.\d+)?)\s*[-–\s]?\s*sigma\s+)?"
+    r"limiting\s+mag(?:nitude)?s?\b"
+    r"\s*(?:of|is|was|are|were|[:=~])\s*"
+    r"(?:a\s+|about\s+|approximately\s+|around\s+|~\s*)*"
+    r"(?P<limit>\d{1,2}\.\d{1,3})"
+    r"(?:[^.;]{0,30}?\(?\s*(?P<sigma_after>\d+(?:\.\d+)?)\s*[-–\s]?\s*sigma)?",
+    re.IGNORECASE,
+)
+
 # "in R-band", "the r' filter": the band a bare limit refers to.
 _BAND_CONTEXT_RE = re.compile(
     rf"(?<![A-Za-z])(?P<filter>{_FILTER_TOKEN})\s*[-\s]?\s*(?:band|filter)\b",
@@ -326,10 +339,24 @@ def _in_ranges(pos: int, ranges: list[tuple[int, int]]) -> bool:
     return any(s <= pos < e for s, e in ranges)
 
 
+# "our clear coadd images": an unfiltered token is itself the band, so it needs
+# no following "band"/"filter" the way a lettered one does.
+_UNFILTERED_CONTEXT_RE = re.compile(
+    r"(?<![A-Za-z])(?P<filter>" + "|".join(_UNFILTERED) + r")\s+"
+    r"(?:co-?add|stack|combined|image|exposure|frame)\w*",
+    re.IGNORECASE,
+)
+
+
 def _context_filter(text: str, pos: int, window: int = 400) -> str | None:
     """The band named most recently before `pos`, for a limit that names none."""
-    for match in reversed(list(_BAND_CONTEXT_RE.finditer(text, max(0, pos - window), pos))):
+    start = max(0, pos - window)
+    matches = list(_BAND_CONTEXT_RE.finditer(text, start, pos))
+    matches += list(_UNFILTERED_CONTEXT_RE.finditer(text, start, pos))
+    for match in sorted(matches, key=lambda m: m.start(), reverse=True):
         raw = match.group("filter")
+        if raw.lower() in _UNFILTERED:
+            return raw.lower()
         name = raw if raw in _KNOWN_FILTERS else normalize_filter(raw)
         if name in _KNOWN_FILTERS:
             return name
@@ -470,6 +497,31 @@ def parse_single_mags_with_spans(text: str) -> list[tuple[PhotometryExt, Span]]:
 
     # Limits stated without a filter beside them, the band taken from context.
     claimed = [(span.start, span.end) for _, span in rows]
+    for match in _LIMITING_MAG_RE.finditer(text):
+        if _in_ranges(match.start(), excluded) or _in_ranges(match.start(), claimed):
+            continue
+        filter_name = _context_filter(text, match.start())
+        if filter_name is None:
+            continue
+        limit = float(match.group("limit"))
+        if not _plausible_mag(filter_name, limit):
+            continue
+        stated_sigma = match.group("sigma") or match.group("sigma_after")
+        claimed.append((match.start(), match.end()))
+        rows.append(
+            (
+                PhotometryExt(
+                    filter=filter_name,
+                    limiting_mag=limit,
+                    limiting_mag_sigma=float(stated_sigma) if stated_sigma else None,
+                    is_detection=False,
+                    mag_system=infer_mag_system(filter_name),
+                    bandpass=infer_bandpass(filter_name),
+                ),
+                Span(start=match.start(), end=match.end(), snippet=match.group(0)),
+            )
+        )
+
     for match in _BARE_LIMIT_RE.finditer(text):
         if _in_ranges(match.start(), excluded) or _in_ranges(match.start(), claimed):
             continue
