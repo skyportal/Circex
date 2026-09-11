@@ -339,3 +339,53 @@ def test_a_counterpart_position_still_makes_a_source():
     actions = to_actions(ex, default_instrument_id=4)
     assert actions.source is not None
     assert actions.source.ra == 45.12
+
+
+def test_a_candidate_table_becomes_one_source_per_object():
+    """GCN 45552: two GOTO candidates, each its own source at its own position."""
+    from circex.bot.skyportal_map import to_actions
+    from circex.schema import CircularExtraction, Event, ExtractionMeta, PhotometryExt
+
+    extraction = CircularExtraction(
+        circular_id=45552,
+        event=Event(event_name="GRB 260910B"),
+        photometry=[
+            PhotometryExt(
+                object_name="GOTO26jjj",
+                ra=264.309139,
+                dec=10.532956,
+                filter="L",
+                mag=20.28,
+                mag_error=0.18,
+            ),
+            PhotometryExt(
+                object_name="AT 2026abfp",
+                object_aliases=["GOTO26jjg"],
+                ra=261.677596,
+                dec=2.050792,
+                filter="L",
+                mag=20.58,
+                mag_error=0.19,
+            ),
+        ],
+        extraction_meta=ExtractionMeta(extractor="test", latency_ms=0.0),
+    )
+    actions = to_actions(extraction, default_instrument_id=1, group_ids=[3])
+    assert [(c.id, c.ra) for c in actions.candidate_sources] == [
+        ("GOTO26jjj", 264.309139),
+        ("AT2026abfp", 261.677596),
+    ]
+    assert all(c.group_ids == [3] for c in actions.candidate_sources)
+
+
+def test_a_candidate_without_a_position_is_not_made_a_source():
+    """SkyPortal cannot create a source with no RA/Dec."""
+    from circex.bot.skyportal_map import to_actions
+    from circex.schema import CircularExtraction, ExtractionMeta, PhotometryExt
+
+    extraction = CircularExtraction(
+        circular_id=1,
+        photometry=[PhotometryExt(object_name="AT 2026zzz", filter="r", mag=19.0)],
+        extraction_meta=ExtractionMeta(extractor="test", latency_ms=0.0),
+    )
+    assert to_actions(extraction, default_instrument_id=1).candidate_sources == ()

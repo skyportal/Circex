@@ -64,6 +64,13 @@ def _obj_id(extraction: CircularExtraction) -> str | None:
     return re.sub(r"\s+", "", chosen) if chosen else None
 
 
+def _as_source_id(name: str | None) -> str | None:
+    """A designation as SkyPortal keys it: "AT 2026abfp" -> "AT2026abfp"."""
+    if not name:
+        return None
+    return re.sub(r"\s+", "", name.strip()) or None
+
+
 @dataclass(frozen=True)
 class SourceUpsert:
     """`POST /api/sources` payload."""
@@ -150,6 +157,10 @@ class SkyPortalActions:
     skipped_rows: int  # photometry rows we could not post (no mjd/filter)
     # Why each was dropped, so a reader can tell a thin light curve from lost data.
     skipped_reasons: tuple[str, ...] = ()
+    # A circular announcing several counterpart candidates gives each its own
+    # designation and position, so each becomes a source in its own right rather
+    # than collapsing onto the event's.
+    candidate_sources: tuple[SourceUpsert, ...] = ()
     # The extractions these actions were built from. Callers that need fields with
     # no place in the SkyPortal write bundle (event designations, classification)
     # would otherwise have to run the extractor a second time.
@@ -218,10 +229,20 @@ def to_actions(
             f"(position comes from the discovery circular)."
         )
 
+    # One source per candidate the circular tabulates, keyed on its designation.
+    # Only a row carrying its own position can become a source: without one
+    # SkyPortal has nothing to create.
+    candidates: dict[str, SourceUpsert] = {}
+    for row in extraction.photometry if not extraction.retraction else []:
+        cid = _as_source_id(row.object_name)
+        if cid is None or row.ra is None or row.dec is None or cid in candidates:
+            continue
+        candidates[cid] = SourceUpsert(id=cid, ra=row.ra, dec=row.dec, group_ids=group_ids)
+
     for idx, row in enumerate(extraction.photometry if not extraction.retraction else []):
         point = _row_to_point(
             extraction,
-            obj_id,
+            _as_source_id(row.object_name) or obj_id,
             idx,
             row,
             instrument_map,
@@ -254,6 +275,7 @@ def to_actions(
 
     return SkyPortalActions(
         source=source,
+        candidate_sources=tuple(candidates.values()),
         photometry=photometry,
         redshift=redshift,
         comments=comments,
