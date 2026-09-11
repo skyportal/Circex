@@ -345,7 +345,9 @@ def test_pipe_candidate_extracts_names_and_decimal_coords() -> None:
     hit = parse_pipe_candidate_with_span(_ZTF_TABLE)
     assert hit is not None
     names, ra, dec, span = hit
-    assert names == ["ZTF26abjbxfs", "AT 2026vts"]
+    # IAU designation first: it is the name SkyPortal keys the source on, and
+    # the survey's internal one is the alias
+    assert names == ["AT 2026vts", "ZTF26abjbxfs"]
     assert ra == 191.3022538
     assert dec == 30.5970446
     assert "191.3022538" in span.snippet
@@ -673,10 +675,13 @@ def test_a_candidate_table_attributes_each_row_to_its_own_object():
         "+------------------------------------------------------------------+\n"
     )
     rows = [p for p, _ in parse_pipe_table_with_spans(body)]
+    # the IAU designation names the object; the survey's internal one is an
+    # alias, and stands in when no IAU name has been assigned yet
     assert [(r.object_name, r.mag) for r in rows] == [
         ("GOTO26jjj", 20.28),
-        ("GOTO26jjg", 20.58),
+        ("AT 2026abfp", 20.58),
     ]
+    assert [r.object_aliases for r in rows] == [[], ["GOTO26jjg"]]
     assert [(r.ra, r.dec) for r in rows] == [
         (264.309139, 10.532956),
         (261.677596, 2.050792),

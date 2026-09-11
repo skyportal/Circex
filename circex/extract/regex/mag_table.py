@@ -674,7 +674,9 @@ def _classify_pipe_columns(cells: list[str]) -> dict[int, str]:
         elif re.search(r"\bdec\b", t):
             roles[i] = "dec"
         elif "name" in t:  # "ZTF Name" / "IAU Name" — counterpart designation
-            roles[i] = "name"
+            # The IAU designation is the object's name; a survey's internal one
+            # is an alias for it, so the two columns are kept apart.
+            roles[i] = "iau_name" if re.search(r"\biau\b|\btns\b", t) else "name"
         elif re.search(r"t0|tgrb|t-t|tmid", t) and re.search(r"h\b|hour|hr", t):
             roles[i] = "rel_hours"
         elif re.search(r"mid-?time|date|\but\b|utc", t):
@@ -724,19 +726,24 @@ def _parse_pipe_row(
             limit = float(bound.group(1))
     if mag is None and limit is None:
         return None
+
     # A table listing several candidates gives each row its own object; without
     # carrying that, two candidates' magnitudes would land on one light curve.
     # A row may carry both an internal and an IAU designation, in separate
-    # columns, and either may be blank: take the first that is filled, in column
-    # order, so the identifier is the one the table always supplies.
-    object_name = next(
-        (
+    # columns, and either may be blank. The IAU name is the object's; a survey's
+    # internal name becomes an alias for it, and stands in when there is no IAU
+    # name yet, which is common for a fresh candidate.
+    def _named(role: str) -> list[str]:
+        return [
             cells[idx].strip()
             for idx in sorted(roles)
-            if roles[idx] == "name" and idx < len(cells) and cells[idx].strip()
-        ),
-        None,
-    )
+            if roles[idx] == role and idx < len(cells) and cells[idx].strip()
+        ]
+
+    iau, internal = _named("iau_name"), _named("name")
+    named = iau + internal
+    object_name: str | None = named[0] if named else None
+    object_aliases = [n for n in named if n != object_name]
     row_ra = _decimal_degrees(by.get("ra"))
     row_dec = _decimal_degrees(by.get("dec"))
     # Filter: "Rc (Vega)" -> "Rc" -> R. Require a recognized, mappable filter.
@@ -770,6 +777,7 @@ def _parse_pipe_row(
         obs_mjd=obs_mjd,
         obs_time=obs_time,
         object_name=object_name,
+        object_aliases=object_aliases,
         ra=row_ra,
         dec=row_dec,
     )
@@ -875,7 +883,7 @@ def parse_pipe_candidate_with_span(text: str) -> tuple[list[str], float, float, 
                     j += 1
                     continue
                 if 0.0 <= ra <= 360.0 and -90.0 <= dec <= 90.0:
-                    names = [n for n in by.get("name", []) if n]
+                    names = [n for n in by.get("iau_name", []) + by.get("name", []) if n]
                     row_text = lines[j].rstrip("\r\n")
                     span = Span(start=offsets[j], end=offsets[j] + len(row_text), snippet=row_text)
                     hits.append((names, ra, dec, span))

@@ -143,6 +143,13 @@ class PhotometryExt(BaseModel):
             "concerns a single target named elsewhere in the extraction."
         ),
     )
+    object_aliases: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Other designations the circular gives this object, such as a "
+            "survey's internal name alongside the IAU one."
+        ),
+    )
     ra: float | None = Field(
         default=None,
         description="Right ascension of this row's object, J2000 degrees.",
