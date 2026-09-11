@@ -45,6 +45,7 @@ from circex.extract.regex.telescope import parse_telescope_with_span
 from circex.extract.regex.xray import parse_xray_with_spans
 from circex.extract.timing import (
     resolve_inline_offsets,
+    resolve_object_epochs,
     resolve_observation_epoch,
     resolve_relative_epochs,
 )
@@ -275,7 +276,16 @@ class RegexExtractor(Extractor):
         # relative offset is rounded ("~4.5 days post-burst") and only fills rows
         # still untimed. Both are no-ops when the circular states neither.
         _apply_stated_mag_system(extraction, body)
-        resolve_observation_epoch(extraction, body, circular.trigger_time)
+        # Per-object first: a candidate's own paragraph times its rows, and only
+        # what that leaves untimed falls back to the circular's single epoch.
+        per_object = resolve_object_epochs(extraction, body)
+        if per_object:
+            extraction.extraction_meta.notes.append(
+                "observation epochs taken per object from the paragraph naming each"
+            )
+        resolve_observation_epoch(
+            extraction, body, circular.trigger_time, timed_per_object=per_object
+        )
         resolve_inline_offsets(extraction, circular.body, circular.trigger_time)
         resolve_relative_epochs(extraction, circular.trigger_time)
         _apply_telescope(extraction, body, provenance)

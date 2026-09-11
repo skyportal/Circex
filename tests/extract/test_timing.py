@@ -395,3 +395,46 @@ def test_an_offset_away_from_the_measurement_is_left_alone():
     )
     resolve_inline_offsets(extraction, body, datetime(2026, 9, 3, tzinfo=UTC))
     assert extraction.photometry[0].obs_mjd is None
+
+
+def test_each_candidate_is_timed_from_its_own_paragraph():
+    """GCN 45552: two candidates, each described with the time it was seen."""
+    from circex.extract.timing import resolve_object_epochs
+    from circex.schema import CircularExtraction, ExtractionMeta, PhotometryExt
+
+    body = (
+        "GOTO26jjg / AT 2026abfp is coincident with a galaxy. The source is "
+        "detected with L = 20.58 at 09:02:46 UTC on 2026-09-11.\n\n"
+        "GOTO26jjj is coincident with a galaxy. The source was covered in the "
+        "single epoch reported above, beginning at 09:30:34 UTC on 2026-09-11.\n"
+    )
+    extraction = CircularExtraction(
+        circular_id=45552,
+        photometry=[
+            PhotometryExt(object_name="AT 2026abfp", object_aliases=["GOTO26jjg"], mag=20.58),
+            PhotometryExt(object_name="GOTO26jjj", mag=20.28),
+        ],
+        extraction_meta=ExtractionMeta(extractor="test", latency_ms=0.0),
+    )
+    assert len(resolve_object_epochs(extraction, body)) == 2
+    assert [p.obs_time for p in extraction.photometry] == [
+        "2026-09-11T09:02:46Z",
+        "2026-09-11T09:30:34Z",
+    ]
+
+
+def test_a_paragraph_naming_two_objects_times_neither():
+    from circex.extract.timing import resolve_object_epochs
+    from circex.schema import CircularExtraction, ExtractionMeta, PhotometryExt
+
+    body = "AT 2026aaa and AT 2026bbb were both observed at 09:02:46 UTC on 2026-09-11.\n"
+    extraction = CircularExtraction(
+        circular_id=1,
+        photometry=[
+            PhotometryExt(object_name="AT 2026aaa", mag=20.0),
+            PhotometryExt(object_name="AT 2026bbb", mag=20.0),
+        ],
+        extraction_meta=ExtractionMeta(extractor="test", latency_ms=0.0),
+    )
+    assert resolve_object_epochs(extraction, body) == set()
+    assert all(p.obs_time is None for p in extraction.photometry)

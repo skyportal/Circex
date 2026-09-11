@@ -20,7 +20,7 @@ from datetime import UTC, datetime
 from astropy.time import Time
 from dateutil import parser as date_parser
 
-from circex.schema import CircularExtraction
+from circex.schema import CircularExtraction, PhotometryExt
 
 # Plausible MJD range so a bare number is read as MJD, not a year or a count:
 # 40000 = 1968-05-24, 90000 = 2031-09-04. GCN circulars fall well inside this.
@@ -206,8 +206,61 @@ def _stated_mid_time(body: str, trigger_time: datetime | None) -> tuple[float, s
     return epoch_from_offset(trigger_time, offset.value, offset.unit)
 
 
+def resolve_object_epochs(extraction: CircularExtraction, body: str) -> set[int]:
+    """Time each candidate's rows from the paragraph that discusses it.
+
+    A circular tabulating several candidates gives the table one epoch column at
+    most, then describes each object in its own paragraph with the time it was
+    seen. Applying the circular's single epoch to every row would put one
+    object's measurement at another's time, so each object is timed from the
+    paragraph that names it -- and only when that paragraph names no other.
+
+    Returns the identities of the rows timed this way, so the circular-level
+    backfill can tell them from a table that carried its own dates.
+    """
+    rows_by_object: dict[str, list[PhotometryExt]] = {}
+    for row in extraction.photometry:
+        if row.obs_mjd is not None or row.obs_time is not None or not row.object_name:
+            continue
+        rows_by_object.setdefault(row.object_name, []).append(row)
+    if not rows_by_object:
+        return set()
+
+    # Every designation an object answers to, so a paragraph using the survey's
+    # internal name is still recognised as being about the IAU-named object.
+    aliases: dict[str, set[str]] = {}
+    for row in extraction.photometry:
+        if row.object_name:
+            aliases.setdefault(row.object_name, {row.object_name}).update(row.object_aliases)
+
+    timed: set[int] = set()
+    for paragraph in re.split(r"\n\s*\n", body):
+        named = [
+            name for name, names in aliases.items() if any(alias in paragraph for alias in names)
+        ]
+        # Two objects in one paragraph leaves the time ambiguous; skip it rather
+        # than attach one object's epoch to the other.
+        if len(named) != 1:
+            continue
+        rows = rows_by_object.get(named[0])
+        if not rows:
+            continue
+        pair = parse_observation_epoch(paragraph)
+        if pair is None:
+            continue
+        mjd, iso = pair
+        for row in rows:
+            row.obs_mjd, row.obs_time = mjd, iso
+            timed.add(id(row))
+        rows_by_object.pop(named[0], None)
+    return timed
+
+
 def resolve_observation_epoch(
-    extraction: CircularExtraction, body: str, trigger_time: datetime | None = None
+    extraction: CircularExtraction,
+    body: str,
+    trigger_time: datetime | None = None,
+    timed_per_object: set[int] | None = None,
 ) -> None:
     """Backfill a single circular-level observation epoch onto untimed rows, in place.
 
@@ -219,7 +272,13 @@ def resolve_observation_epoch(
     """
     if not extraction.photometry:
         return
-    if any(r.obs_mjd is not None or r.obs_time is not None for r in extraction.photometry):
+    # Rows already timed from their own object's paragraph are not evidence that
+    # this table carried dates, so they neither block the backfill nor take it.
+    per_object = timed_per_object or set()
+    pending = [r for r in extraction.photometry if id(r) not in per_object]
+    if not pending:
+        return
+    if any(r.obs_mjd is not None or r.obs_time is not None for r in pending):
         return
     # A datetime in the prose is usually when the exposures began; where the
     # circular also states the mid-time, that is the epoch of the measurement.
@@ -227,7 +286,7 @@ def resolve_observation_epoch(
     if pair is None:
         return
     mjd, iso = pair
-    for row in extraction.photometry:
+    for row in pending:
         row.obs_mjd = mjd
         row.obs_time = iso
     extraction.extraction_meta.notes.append(
