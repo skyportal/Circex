@@ -389,3 +389,17 @@ def test_a_candidate_without_a_position_is_not_made_a_source():
         extraction_meta=ExtractionMeta(extractor="test", latency_ms=0.0),
     )
     assert to_actions(extraction, default_instrument_id=1).candidate_sources == ()
+
+
+def test_gotos_wide_l_maps_to_its_own_bandpass():
+    """L means gotol on GOTO, and nothing at all from another telescope."""
+    from circex.bot.skyportal_map import _effective_band
+    from circex.schema import PhotometryExt
+
+    goto = PhotometryExt(filter="L", mag=20.28, telescope="GOTO")
+    assert _effective_band(goto) == ("gotol", "ab")
+
+    # LCO has no L filter, so the same letter stays unmapped rather than
+    # borrowing GOTO's band.
+    elsewhere = PhotometryExt(filter="L", mag=20.28, telescope="LCO")
+    assert _effective_band(elsewhere)[0] is None

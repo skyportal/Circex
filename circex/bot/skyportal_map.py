@@ -15,7 +15,7 @@ from __future__ import annotations
 import re
 from collections import Counter
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Final
 
 import structlog
 
@@ -285,6 +285,14 @@ def to_actions(
     )
 
 
+# A wide filter only means something alongside its telescope: GOTO's L has a
+# SkyPortal bandpass of its own, and the same letter from anywhere else does
+# not, so the pair is what maps rather than the filter alone.
+_TELESCOPE_BANDPASS: Final[dict[tuple[str, str], tuple[str, str]]] = {
+    ("goto", "L"): ("gotol", "ab"),
+}
+
+
 def _effective_band(row: PhotometryExt) -> tuple[str | None, str]:
     """Canonical (bandpass, magsys) for a row.
 
@@ -298,6 +306,9 @@ def _effective_band(row: PhotometryExt) -> tuple[str | None, str]:
     if row.frequency_ghz is not None:
         return (row.bandpass or bandpass_for_frequency(row.frequency_ghz)), "ab"
     base = normalize_filter(row.filter) if row.filter else None
+    telescope = (row.telescope_canonical or row.telescope or "").strip().lower()
+    if base and (pair := _TELESCOPE_BANDPASS.get((telescope, base))) is not None:
+        return pair
     band = infer_bandpass(base) if base else None
     if band is not None:
         system = infer_mag_system(base) if base else None
