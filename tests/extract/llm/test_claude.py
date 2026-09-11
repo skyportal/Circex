@@ -15,9 +15,7 @@ from circex.extract.protocol import Circular
 
 def _mock_anthropic(tool_input: dict[str, object]) -> MagicMock:
     """Build a MagicMock that mimics anthropic.Anthropic() with messages.create."""
-    tool_use_block = SimpleNamespace(
-        type="tool_use", name="submit_extraction", input=tool_input
-    )
+    tool_use_block = SimpleNamespace(type="tool_use", name="submit_extraction", input=tool_input)
     usage = SimpleNamespace(
         input_tokens=1200,
         output_tokens=180,
@@ -72,9 +70,7 @@ def test_extract_populates_meta() -> None:
 def test_cache_hit_returns_cached_without_api_call(tmp_path: Path) -> None:
     cache = LLMCache(tmp_path / "c.sqlite")
     client = _mock_anthropic({"event": {"event_name": "GRB X"}})
-    ext = ClaudeExtractor(
-        model_id="claude-haiku-4-5-20251001", cache=cache, client=client
-    )
+    ext = ClaudeExtractor(model_id="claude-haiku-4-5-20251001", cache=cache, client=client)
 
     circ = Circular(circular_id=99, subject="s", body="b")
     ext.extract(circ)

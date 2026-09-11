@@ -66,9 +66,7 @@ class _FakeWorker(threading.Thread):
 def bridge_and_worker() -> Iterator[tuple[int, _FakeWorker]]:
     worker_port = _free_port()
     bridge_port = _free_port()
-    worker = _FakeWorker(
-        worker_port, {"ok": True, "result": {"redshift": 1.61}, "id": None}
-    )
+    worker = _FakeWorker(worker_port, {"ok": True, "result": {"redshift": 1.61}, "id": None})
     worker.start()
 
     serve.WORKER_HOST = "127.0.0.1"
@@ -86,8 +84,7 @@ def bridge_and_worker() -> Iterator[tuple[int, _FakeWorker]]:
 
 def _post(port: int, path: str, body: dict[str, object]) -> tuple[int, dict]:
     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
-    conn.request("POST", path, json.dumps(body),
-                 {"Content-Type": "application/json"})
+    conn.request("POST", path, json.dumps(body), {"Content-Type": "application/json"})
     resp = conn.getresponse()
     data = json.loads(resp.read().decode("utf-8"))
     conn.close()
@@ -113,7 +110,8 @@ def test_index_served(bridge_and_worker: tuple[int, _FakeWorker]) -> None:
 def test_tool_call_forwarded(bridge_and_worker: tuple[int, _FakeWorker]) -> None:
     port, worker = bridge_and_worker
     status, data = _post(
-        port, "/api/tool",
+        port,
+        "/api/tool",
         {"tool": "get_redshift", "arguments": {"event": "GRB 990123"}},
     )
     assert status == 200
@@ -123,9 +121,7 @@ def test_tool_call_forwarded(bridge_and_worker: tuple[int, _FakeWorker]) -> None
     assert worker.requests[0]["arguments"] == {"event": "GRB 990123"}
 
 
-def test_tool_not_in_allowlist_rejected(
-    bridge_and_worker: tuple[int, _FakeWorker]
-) -> None:
+def test_tool_not_in_allowlist_rejected(bridge_and_worker: tuple[int, _FakeWorker]) -> None:
     port, _ = bridge_and_worker
     status, data = _post(port, "/api/tool", {"tool": "rm_rf", "arguments": {}})
     assert status == 400
@@ -134,9 +130,7 @@ def test_tool_not_in_allowlist_rejected(
 
 def test_bad_arguments_rejected(bridge_and_worker: tuple[int, _FakeWorker]) -> None:
     port, _ = bridge_and_worker
-    status, data = _post(
-        port, "/api/tool", {"tool": "get_redshift", "arguments": "oops"}
-    )
+    status, data = _post(port, "/api/tool", {"tool": "get_redshift", "arguments": "oops"})
     assert status == 400
 
 

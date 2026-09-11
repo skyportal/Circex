@@ -15,8 +15,13 @@ from circex.schema import CircularExtraction
 def _ext(circular_id: int, redshift: float | None = None) -> CircularExtraction:
     payload = {
         "circular_id": circular_id,
-        "extraction_meta": {"extractor": "test", "cost_usd": 0.001, "latency_ms": 100.0,
-                            "tokens_in": 1000, "tokens_out": 100},
+        "extraction_meta": {
+            "extractor": "test",
+            "cost_usd": 0.001,
+            "latency_ms": 100.0,
+            "tokens_in": 1000,
+            "tokens_out": 100,
+        },
     }
     if redshift is not None:
         payload["redshift"] = {"redshift": redshift}

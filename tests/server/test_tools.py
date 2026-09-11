@@ -30,9 +30,7 @@ def _full_extraction(
         event=Event(event_name=event),
         redshift=Redshift(redshift=0.215, redshift_type="host"),
         classification=Classification(classification="Ic-BL"),
-        localization=(
-            Localization(ra=ra, dec=dec) if ra is not None and dec is not None else None
-        ),
+        localization=(Localization(ra=ra, dec=dec) if ra is not None and dec is not None else None),
         photometry=[PhotometryExt(filter="r", mag=18.5, mag_system="AB")],
         extraction_meta=ExtractionMeta(extractor="regex-v1"),
     )

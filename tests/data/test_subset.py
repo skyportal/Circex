@@ -55,9 +55,7 @@ def test_classify_returns_none_for_unmatched() -> None:
 def test_build_stratified_subset_per_stratum_cap() -> None:
     circulars: list[dict[str, Any]] = []
     for i in range(20):
-        circulars.append(
-            {"circularId": i, "body": f"r = 18.{i:02d} in the Sloan filter."}
-        )
+        circulars.append({"circularId": i, "body": f"r = 18.{i:02d} in the Sloan filter."})
     subset = build_stratified_subset(circulars, per_stratum=5, seed=42)
     assert len(subset) == 5
     assert all(s.stratum == "single_row_mag" for s in subset)

@@ -80,9 +80,7 @@ def test_upsert_inserts_into_circulars(tmp_path: Path) -> None:
     conn = get_connection(tmp_path / "test.sqlite")
     upsert_circular(conn, make_record())
     conn.commit()
-    row = conn.execute(
-        "SELECT * FROM circulars WHERE circular_id_raw = ?", ("43493",)
-    ).fetchone()
+    row = conn.execute("SELECT * FROM circulars WHERE circular_id_raw = ?", ("43493",)).fetchone()
     assert row is not None
     assert row["primary_event_norm"] == "GRB260120B"
     assert row["circular_id_int"] == 43493

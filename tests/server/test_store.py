@@ -27,9 +27,7 @@ def _make_extraction(
         circular_id=circular_id,
         event=Event(event_name=event_name) if event_name else None,
         redshift=Redshift(redshift=redshift) if redshift is not None else None,
-        localization=(
-            Localization(ra=ra, dec=dec) if ra is not None and dec is not None else None
-        ),
+        localization=(Localization(ra=ra, dec=dec) if ra is not None and dec is not None else None),
         extraction_meta=ExtractionMeta(extractor=extractor, prompt_version=prompt_version),
     )
 

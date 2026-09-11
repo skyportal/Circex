@@ -135,6 +135,22 @@ class PhotometryExt(BaseModel):
     )
 
     # ---- optical-specific extensions added by Circex ----
+    object_name: str | None = Field(
+        default=None,
+        description=(
+            "Designation of the object this row measures, for a circular that "
+            "reports several candidates in one table. None when the circular "
+            "concerns a single target named elsewhere in the extraction."
+        ),
+    )
+    ra: float | None = Field(
+        default=None,
+        description="Right ascension of this row's object, J2000 degrees.",
+    )
+    dec: float | None = Field(
+        default=None,
+        description="Declination of this row's object, J2000 degrees.",
+    )
     telescope: str | None = Field(
         default=None, description="Name of the telescope (e.g., GTC, ZTF, Pan-STARRS1)."
     )

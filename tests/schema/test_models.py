@@ -46,14 +46,22 @@ MODELS_AND_EXAMPLES: list[tuple[type[BaseModel], dict[str, object]]] = [
     (Reporter, {"mission": "Pan-STARRS", "instrument": "PS1", "messenger": "EM"}),
     (
         Reporter,
-        {"mission": "LVK", "messenger": "GW", "spectral_band": [10.0, 1000.0],
-         "spectral_band_units": "MHz"},
+        {
+            "mission": "LVK",
+            "messenger": "GW",
+            "spectral_band": [10.0, 1000.0],
+            "spectral_band_units": "MHz",
+        },
     ),
     (TimeOffset, {"value": 234.0, "unit": "s", "reference": "T+"}),
     (
         SpectralLine,
-        {"line_id": "Halpha", "rest_wavelength": 6562.8, "observed_wavelength": 6625.3,
-         "equivalent_width": -3.2},
+        {
+            "line_id": "Halpha",
+            "rest_wavelength": 6562.8,
+            "observed_wavelength": 6625.3,
+            "equivalent_width": -3.2,
+        },
     ),
     (
         SpectralLines,
@@ -64,9 +72,16 @@ MODELS_AND_EXAMPLES: list[tuple[type[BaseModel], dict[str, object]]] = [
     ),
     (
         ExtractionMeta,
-        {"extractor": "claude-haiku-4-5", "model_id": "claude-haiku-4-5-20251001",
-         "prompt_version": "PROMPT_V1", "tokens_in": 1500, "tokens_out": 320,
-         "latency_ms": 850.0, "cost_usd": 0.0024, "cache_hit": False},
+        {
+            "extractor": "claude-haiku-4-5",
+            "model_id": "claude-haiku-4-5-20251001",
+            "prompt_version": "PROMPT_V1",
+            "tokens_in": 1500,
+            "tokens_out": 320,
+            "latency_ms": 850.0,
+            "cost_usd": 0.0024,
+            "cache_hit": False,
+        },
     ),
     (
         ExtractionMeta,
@@ -100,11 +115,20 @@ def test_circular_extraction_full_roundtrip() -> None:
         "datetime": {"trigger_time": "2023-03-07T15:44:06Z"},
         "time_offsets": [{"value": 100.0, "unit": "s", "reference": "T+"}],
         "photometry": [
-            {"filter": "r", "mag": 19.1, "mag_error": 0.05, "mag_system": "AB",
-             "telescope": "ZTF", "instrument": "ZTF Camera"}
+            {
+                "filter": "r",
+                "mag": 19.1,
+                "mag_error": 0.05,
+                "mag_system": "AB",
+                "telescope": "ZTF",
+                "instrument": "ZTF Camera",
+            }
         ],
-        "redshift": {"redshift": 0.065, "redshift_measure": "spectroscopic",
-                     "redshift_type": "host"},
+        "redshift": {
+            "redshift": 0.065,
+            "redshift_measure": "spectroscopic",
+            "redshift_type": "host",
+        },
         "extraction_meta": {"extractor": "claude-haiku-4-5"},
     }
     ce = CircularExtraction.model_validate(payload)
@@ -151,9 +175,7 @@ def test_classification_taxonomy_path_survives_round_trip() -> None:
 
 def test_classification_overwrites_supplied_taxonomy_path() -> None:
     """A bogus supplied path is replaced by the canonical derivation."""
-    c = Classification.model_validate(
-        {"classification": "Ia", "taxonomy_path": ["bogus", "path"]}
-    )
+    c = Classification.model_validate({"classification": "Ia", "taxonomy_path": ["bogus", "path"]})
     assert c.taxonomy_path is not None and c.taxonomy_path[-1] == "Ia"
     assert "bogus" not in c.taxonomy_path
 

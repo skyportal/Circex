@@ -30,12 +30,19 @@ def _insert_circular(
         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
         """,
         (
-            circular_id_raw, circular_id_int,
+            circular_id_raw,
+            circular_id_int,
             "GRB 260120B: Swift-BAT refined analysis",
             "Further analysis of BAT GRB 260120B.",
-            1769036892952, "Tester", "text/plain",
-            "GRB 260120B", "GRB 260120B", "GRB260120B",
-            "eventId", None, record_hash,
+            1769036892952,
+            "Tester",
+            "text/plain",
+            "GRB 260120B",
+            "GRB 260120B",
+            "GRB260120B",
+            "eventId",
+            None,
+            record_hash,
         ),
     )
     conn.commit()
@@ -121,9 +128,19 @@ def test_circulars_has_all_expected_columns(tmp_path: Path) -> None:
     try:
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(circulars)").fetchall()}
         required = {
-            "circular_id_raw", "circular_id_int", "subject", "body", "created_on",
-            "submitter", "format", "raw_event_id", "primary_event_raw",
-            "primary_event_norm", "extraction_source", "llm_confidence", "record_hash",
+            "circular_id_raw",
+            "circular_id_int",
+            "subject",
+            "body",
+            "created_on",
+            "submitter",
+            "format",
+            "raw_event_id",
+            "primary_event_raw",
+            "primary_event_norm",
+            "extraction_source",
+            "llm_confidence",
+            "record_hash",
         }
         assert required <= cols
     finally:

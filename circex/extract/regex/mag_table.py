@@ -32,6 +32,10 @@ _BESSEL: Final[frozenset[str]] = frozenset({"U", "B", "V", "R", "I"})
 # that the lowercase token means. Case is the only thing telling them apart.
 _NIR: Final[frozenset[str]] = frozenset({"Y", "J", "H", "K", "Ks"})
 
+# Wide survey filters with no sncosmo equivalent. Recognised so their rows are
+# read and attributed, with bandpass left unset rather than guessed.
+_WIDE: Final[frozenset[str]] = frozenset({"L"})
+
 _HST: Final[frozenset[str]] = frozenset(
     {"F450W", "F555W", "F606W", "F702W", "F775W", "F814W", "F850LP", "F160W", "F110W"}
 )
@@ -39,6 +43,7 @@ _KNOWN_FILTERS: Final[frozenset[str]] = (
     _SLOAN
     | _BESSEL
     | _NIR
+    | _WIDE
     | _HST
     | frozenset(_UVOT)
     | frozenset(_SVOM_VT)
@@ -56,7 +61,7 @@ _FILTER_TOKEN = (
     r"|" + "|".join(_SVOM_VT) + r""
     r"|" + "|".join(_UVOT) + r""
     r"|" + "|".join(_UNFILTERED) + r""
-    r"|[UBVRI]c|[ugriz][p" + _PRIMES + r"]|[UBVRIJHKYgrizyuCW]s?)"
+    r"|[UBVRI]c|[ugriz][p" + _PRIMES + r"]|[UBVRIJHKYLgrizyuCW]s?)"
 )
 
 # "5-sigma upper limit: J = 19.07" states a limit in the syntax of a detection.
@@ -682,8 +687,19 @@ def _classify_pipe_columns(cells: list[str]) -> dict[int, str]:
 _PIPE_FRAME_RE = re.compile(r"^\s*\+[-=+\s]*\+?\s*$")
 
 
+def _decimal_degrees(cell: str | None) -> float | None:
+    """A coordinate cell as decimal degrees, or None when it is not one."""
+    if not cell:
+        return None
+    m = re.fullmatch(r"([+-]?\d{1,3}(?:\.\d+)?)", cell.strip())
+    return float(m.group(1)) if m else None
+
+
 def _parse_pipe_row(
-    cells: list[str], roles: dict[int, str], trigger_time: datetime | None
+    cells: list[str],
+    roles: dict[int, str],
+    trigger_time: datetime | None,
+    prose_filter: str | None = None,
 ) -> PhotometryExt | None:
     by = {role: cells[idx] for idx, role in roles.items() if idx < len(cells)}
     m = _PIPE_MAG_RE.search(by.get("mag", ""))
@@ -708,11 +724,35 @@ def _parse_pipe_row(
             limit = float(bound.group(1))
     if mag is None and limit is None:
         return None
+    # A table listing several candidates gives each row its own object; without
+    # carrying that, two candidates' magnitudes would land on one light curve.
+    # A row may carry both an internal and an IAU designation, in separate
+    # columns, and either may be blank: take the first that is filled, in column
+    # order, so the identifier is the one the table always supplies.
+    object_name = next(
+        (
+            cells[idx].strip()
+            for idx in sorted(roles)
+            if roles[idx] == "name" and idx < len(cells) and cells[idx].strip()
+        ),
+        None,
+    )
+    row_ra = _decimal_degrees(by.get("ra"))
+    row_dec = _decimal_degrees(by.get("dec"))
     # Filter: "Rc (Vega)" -> "Rc" -> R. Require a recognized, mappable filter.
+    # A candidate table names no band per row -- it states one in prose for the
+    # whole circular -- so that is accepted in place of a column.
     raw = by.get("filter")
     base = normalize_filter(re.split(r"[ (]", raw.strip())[0]) if raw else None
+    if base is None and prose_filter is not None:
+        base = prose_filter
     if base is None or base not in _KNOWN_FILTERS:
         return None
+    # A wide table repeating filter/mag/error per band can have its mag column
+    # misread, so hold a pipe row to the same plausibility the prose parsers use.
+    for value in (mag, limit):
+        if value is not None and not _plausible_mag(base, value):
+            return None
     obs_mjd = obs_time = None
     if by.get("abs_time") and (ep := epoch_from_absolute(by["abs_time"])) is not None:
         obs_mjd, obs_time = ep
@@ -729,6 +769,9 @@ def _parse_pipe_row(
         bandpass=infer_bandpass(base),
         obs_mjd=obs_mjd,
         obs_time=obs_time,
+        object_name=object_name,
+        ra=row_ra,
+        dec=row_dec,
     )
 
 
@@ -737,6 +780,8 @@ def parse_pipe_table_with_spans(
 ) -> list[tuple[PhotometryExt, Span]]:
     """Parse pipe-delimited magnitude tables. Per-row Spans; relative times use T0."""
     rows: list[tuple[PhotometryExt, Span]] = []
+    # A candidate table names no band per row; the circular states one in prose.
+    prose_filter = _context_filter(text, len(text), window=len(text))
     lines = text.splitlines(keepends=True)
     offsets = [0]
     for line in lines:
@@ -753,13 +798,25 @@ def parse_pipe_table_with_spans(
             i += 1
             continue
         j = i + 1
-        while j < len(lines) and ("|" in lines[j] or _PIPE_FRAME_RE.match(lines[j])):
+        while j < len(lines):
+            if not lines[j].strip():
+                # Some templates space their rows out. A blank run only ends the
+                # table when nothing table-shaped follows it.
+                k = j
+                while k < len(lines) and not lines[k].strip():
+                    k += 1
+                if k < len(lines) and ("|" in lines[k] or _PIPE_FRAME_RE.match(lines[k])):
+                    j = k
+                    continue
+                break
+            if "|" not in lines[j] and not _PIPE_FRAME_RE.match(lines[j]):
+                break
             if _PIPE_FRAME_RE.match(lines[j]):
                 j += 1  # ASCII box frame, not a data row — but not the end either
                 continue
             cells = _pipe_cells(lines[j])
             if not _is_separator_row(cells):
-                row = _parse_pipe_row(cells, roles, trigger_time)
+                row = _parse_pipe_row(cells, roles, trigger_time, prose_filter)
                 if row is not None:
                     row_text = lines[j].rstrip("\r\n")
                     rows.append(

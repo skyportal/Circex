@@ -76,10 +76,17 @@ def test_vidushi_examples_skips_empty_text() -> None:
     from circex.data.swift_gold import SwiftEvaluationRow
 
     row = SwiftEvaluationRow(
-        circular_id=2, text="   ", circular_date="2009",
-        actual_redshift=0.5, actual_grb_number="000000", actual_telescope=None,
-        actual_redshift_type=None, predicted_redshift=None, predicted_grb_number=None,
-        predicted_telescope=None, predicted_redshift_type=None,
+        circular_id=2,
+        text="   ",
+        circular_date="2009",
+        actual_redshift=0.5,
+        actual_grb_number="000000",
+        actual_telescope=None,
+        actual_redshift_type=None,
+        predicted_redshift=None,
+        predicted_grb_number=None,
+        predicted_telescope=None,
+        predicted_redshift_type=None,
     )
     assert list(vidushi_examples([row])) == []
 

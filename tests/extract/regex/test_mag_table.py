@@ -657,3 +657,40 @@ def test_a_bare_upper_limit_without_mag_is_still_not_a_magnitude():
     from circex.extract.regex.mag_table import parse_single_mags
 
     assert parse_single_mags("In the R-band we place a 3-sigma upper limit of 12.5 counts/s.") == []
+
+
+def test_a_candidate_table_attributes_each_row_to_its_own_object():
+    """GCN 45552: GOTO lists two candidates, ruled and spaced, band stated in prose."""
+    from circex.extract.regex.mag_table import parse_pipe_table_with_spans
+
+    body = (
+        "Observations consisted of 4x90s exposures in the GOTO L-band filter.\n\n"
+        "+------------------------------------------------------------------+\n"
+        "| Internal name | IAU name | RA (J2000) | Dec (J2000) | Discovery mag (AB) |\n"
+        "+------------------------------------------------------------------+\n\n"
+        "|    GOTO26jjj   |            | 264.309139 |  10.532956  | 20.28 +/- 0.18 |\n\n"
+        "|    GOTO26jjg   | AT 2026abfp | 261.677596 |  2.050792  | 20.58 +/- 0.19 |\n\n"
+        "+------------------------------------------------------------------+\n"
+    )
+    rows = [p for p, _ in parse_pipe_table_with_spans(body)]
+    assert [(r.object_name, r.mag) for r in rows] == [
+        ("GOTO26jjj", 20.28),
+        ("GOTO26jjg", 20.58),
+    ]
+    assert [(r.ra, r.dec) for r in rows] == [
+        (264.309139, 10.532956),
+        (261.677596, 2.050792),
+    ]
+    # no sncosmo band for GOTO's wide L, so it is read but not crosswalked
+    assert all(r.filter == "L" and r.bandpass is None for r in rows)
+
+
+def test_a_row_whose_magnitude_column_is_misread_is_dropped():
+    """A repeated filter/mag/error layout can misplace the mag; 0.08 is not one."""
+    from circex.extract.regex.mag_table import parse_pipe_table_with_spans
+
+    body = (
+        "| Name | RA | DEC | Filter | Mag | Err |\n"
+        "| DG19ftnb | 167.595543 | -4.358810 | r | 0.08 | 20.39 |\n"
+    )
+    assert parse_pipe_table_with_spans(body) == []

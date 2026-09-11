@@ -12,18 +12,14 @@ from circex.extract.protocol import Circular
 def _mock_ollama(*responses: dict[str, object]) -> MagicMock:
     """Return a MagicMock whose .chat returns each given response in turn."""
     client = MagicMock()
-    client.chat.side_effect = [
-        {"message": {"content": json.dumps(r)}} for r in responses
-    ]
+    client.chat.side_effect = [{"message": {"content": json.dumps(r)}} for r in responses]
     return client
 
 
 def test_extractor_id() -> None:
     # Pass model_id explicitly so the test is independent of the env-overridable
     # DEFAULT_OLLAMA_MODEL (currently the q4_K_M quantization of v0.2).
-    ext = OllamaExtractor(
-        model_id="mistral:7b-instruct-v0.2", client=_mock_ollama({})
-    )
+    ext = OllamaExtractor(model_id="mistral:7b-instruct-v0.2", client=_mock_ollama({}))
     assert ext.extractor_id == "ollama:mistral:7b-instruct-v0.2"
 
 

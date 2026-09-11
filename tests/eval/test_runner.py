@@ -21,9 +21,7 @@ class _MockExtractor:
             raise RuntimeError("simulated failure")
         return CircularExtraction(
             circular_id=circular.circular_id,
-            extraction_meta=ExtractionMeta(
-                extractor=self.extractor_id, cost_usd=self.cost
-            ),
+            extraction_meta=ExtractionMeta(extractor=self.extractor_id, cost_usd=self.cost),
         )
 
 
