@@ -15,7 +15,9 @@ from pydantic import BaseModel, Field, model_validator
 
 MagSystem = Literal["AB", "Vega", "STMag"]
 FluxDensityUnit = Literal["uJy", "mJy", "Jy"]
-CalibrationReference = Literal["PS1", "SDSS", "APASS", "2MASS", "Gaia", "Other"]
+# Ordered by how often circulars name them. USNO leads the archive and GSC is
+# cited more than APASS or Gaia; the rest of the long tail is "Other".
+CalibrationReference = Literal["USNO", "PS1", "SDSS", "2MASS", "GSC", "APASS", "Gaia", "Other"]
 
 
 class PhotometryExt(BaseModel):
@@ -184,7 +186,7 @@ class PhotometryExt(BaseModel):
         default=None,
         description=(
             "Photometric calibration reference catalog. One of "
-            "[PS1, SDSS, APASS, 2MASS, Gaia, Other]."
+            "[USNO, PS1, SDSS, 2MASS, GSC, APASS, Gaia, Other]."
         ),
     )
     galactic_extinction_corrected: bool | None = Field(

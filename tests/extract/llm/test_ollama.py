@@ -109,3 +109,20 @@ def test_a_listed_calibration_catalogue_is_left_alone():
         {"photometry": [{"calibration_reference": "PS1"}]}, body=""
     )
     assert payload["photometry"][0]["calibration_reference"] == "PS1"
+
+
+def test_the_catalogues_circulars_cite_most_are_nameable():
+    """USNO leads the archive and GSC beats two existing members."""
+    from typing import get_args
+
+    from circex.schema.photometry import CalibrationReference
+
+    listed = set(get_args(CalibrationReference))
+    assert {"USNO", "GSC"} <= listed
+    # the long tail still folds into the escape hatch
+    from circex.extract.llm.ollama import OllamaExtractor
+
+    payload = OllamaExtractor._sanitize_payload(
+        {"photometry": [{"calibration_reference": "SkyMapper"}]}, body=""
+    )
+    assert payload["photometry"][0]["calibration_reference"] == "Other"

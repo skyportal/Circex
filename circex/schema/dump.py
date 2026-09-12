@@ -29,7 +29,7 @@ GCN_SCHEMA_ID_PREFIX = "https://gcn.nasa.gov/schema/main/gcn/notices/core"
 # Semantic version of the dumped JSON Schema artifacts. Bump on every change to
 # the generated schemas (CI enforces this). Distinct from the package version in
 # pyproject.toml: code-only changes do not bump this; schema-shape changes do.
-SCHEMA_VERSION = "0.6.0"
+SCHEMA_VERSION = "0.7.0"
 
 
 def _attach_gcn_id(schema: dict[str, Any], title: str, filename: str) -> dict[str, Any]:

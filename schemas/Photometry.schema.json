@@ -1,7 +1,7 @@
 {
   "$id": "https://gcn.nasa.gov/schema/main/gcn/notices/core/Photometry.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "title": "PhotometryExt",
   "description": "Magnitude-based UV/optical/NIR photometry for one source in one filter (one row).",
   "properties": {
@@ -355,10 +355,12 @@
       "anyOf": [
         {
           "enum": [
+            "USNO",
             "PS1",
             "SDSS",
-            "APASS",
             "2MASS",
+            "GSC",
+            "APASS",
             "Gaia",
             "Other"
           ],
@@ -369,7 +371,7 @@
         }
       ],
       "default": null,
-      "description": "Photometric calibration reference catalog. One of [PS1, SDSS, APASS, 2MASS, Gaia, Other].",
+      "description": "Photometric calibration reference catalog. One of [USNO, PS1, SDSS, 2MASS, GSC, APASS, Gaia, Other].",
       "title": "Calibration Reference"
     },
     "galactic_extinction_corrected": {

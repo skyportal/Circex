@@ -1,7 +1,7 @@
 {
   "$id": "https://gcn.nasa.gov/schema/main/gcn/notices/core/Classification.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "title": "Classification",
   "description": "Source classification with optional subtype and confidence.",
   "properties": {
