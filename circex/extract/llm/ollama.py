@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import os
 import time
-from typing import Any
+from typing import Any, get_args
 
 import ollama
 import structlog
@@ -32,6 +32,7 @@ from circex.extract.timing import (
     resolve_relative_epochs,
 )
 from circex.schema import CircularExtraction, ExtractionMeta
+from circex.schema.photometry import CalibrationReference
 from circex.taxonomy import normalize_classification
 
 log = structlog.get_logger(__name__)
@@ -292,5 +293,19 @@ class OllamaExtractor(Extractor):
                         ref[rk] = ",".join(flat) if flat else None
                     elif rv is not None and not isinstance(rv, str | int | float):
                         ref[rk] = str(rv)
+
+        # --- calibration reference ---
+        # Unconstrained, a model names the catalogue it actually read ("USNO
+        # B-1.0"), which is not one the enum lists. That is a true statement
+        # about one field, so it becomes the enum's own escape hatch rather
+        # than failing validation and discarding the whole extraction with it.
+        rows = payload.get("photometry")
+        if isinstance(rows, list):
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                ref_value = row.get("calibration_reference")
+                if isinstance(ref_value, str) and ref_value not in get_args(CalibrationReference):
+                    row["calibration_reference"] = "Other"
 
         return payload

@@ -89,3 +89,23 @@ def test_ollama_ignores_non_list_notes() -> None:
     ext = OllamaExtractor(client=client)
     result = ext.extract(Circular(circular_id=1, subject="", body="b"))
     assert result.extraction_meta.notes == []
+
+
+def test_an_unlisted_calibration_catalogue_becomes_other():
+    """A model naming the catalogue it read must not fail the whole extraction."""
+    from circex.extract.llm.ollama import OllamaExtractor
+
+    payload = OllamaExtractor._sanitize_payload(
+        {"photometry": [{"filter": "i", "mag": 22.6, "calibration_reference": "USNO B-1.0"}]},
+        body="",
+    )
+    assert payload["photometry"][0]["calibration_reference"] == "Other"
+
+
+def test_a_listed_calibration_catalogue_is_left_alone():
+    from circex.extract.llm.ollama import OllamaExtractor
+
+    payload = OllamaExtractor._sanitize_payload(
+        {"photometry": [{"calibration_reference": "PS1"}]}, body=""
+    )
+    assert payload["photometry"][0]["calibration_reference"] == "PS1"
