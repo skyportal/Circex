@@ -252,6 +252,53 @@
       "description": "Same epoch as obs_mjd in ISO-8601 UTC (human-legible mirror).",
       "title": "Obs Time"
     },
+    "object_name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Designation of the object this row measures, for a circular that reports several candidates in one table. None when the circular concerns a single target named elsewhere in the extraction.",
+      "title": "Object Name"
+    },
+    "object_aliases": {
+      "description": "Other designations the circular gives this object, such as a survey's internal name alongside the IAU one.",
+      "items": {
+        "type": "string"
+      },
+      "title": "Object Aliases",
+      "type": "array"
+    },
+    "ra": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Right ascension of this row's object, J2000 degrees.",
+      "title": "Ra"
+    },
+    "dec": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Declination of this row's object, J2000 degrees.",
+      "title": "Dec"
+    },
     "telescope": {
       "anyOf": [
         {
