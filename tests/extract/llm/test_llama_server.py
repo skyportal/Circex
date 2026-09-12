@@ -166,3 +166,38 @@ def test_api_key_is_not_part_of_the_cache_key():
         keyed.extractor_id,
         keyed.prompt_version,
     )
+
+
+def test_unconstrained_mode_sends_no_response_format_and_reads_fenced_json():
+    """A server that answers a schema with nulls needs asking in prose instead."""
+    import json as _json
+
+    from circex.extract.llm.llama_server import LlamaServerExtractor
+    from circex.extract.protocol import Circular
+
+    sent = {}
+
+    class FakeResponse:
+        status_code = 200
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            body = _json.dumps({"photometry": [{"filter": "r", "mag": 19.5}]})
+            return {"choices": [{"message": {"content": f"Here you go:\n```json\n{body}\n```"}}]}
+
+    class FakeSession:
+        def post(self, url, json=None, headers=None, timeout=None):
+            sent.update(json or {})
+            return FakeResponse()
+
+    extractor = LlamaServerExtractor(
+        session=FakeSession(), structured=False, extra_body={"reasoning_effort": "low"}
+    )
+    result = extractor.extract(Circular(circular_id=1, subject="s", body="b"))
+
+    assert "response_format" not in sent, "the schema is what the server mishandles"
+    assert sent["reasoning_effort"] == "low"
+    assert extractor.extractor_id.endswith(":free")
+    assert [p.mag for p in result.photometry] == [19.5]

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from typing import Any
 
@@ -61,6 +62,32 @@ DEFAULT_LLAMA_REQUIRE_FIELDS = os.environ.get("CIRCEX_LLAMA_REQUIRE_FIELDS", "")
 # Bearer token, for a server reached over the open internet rather than through
 # an ssh tunnel. A llama-server on localhost needs none.
 DEFAULT_LLAMA_API_KEY = os.environ.get("CIRCEX_LLAMA_API_KEY") or None
+# Constrained decoding is the default because a conforming answer cannot then be
+# malformed. Not every server honours it usefully: a reasoning model asked for a
+# schema may satisfy it with an all-null object and stop. Turning this off asks
+# for the same JSON in prose and validates what comes back, which is weaker but
+# is the difference between an answer and an empty one on such a server.
+DEFAULT_LLAMA_STRUCTURED = os.environ.get("CIRCEX_LLAMA_STRUCTURED", "1").lower() not in (
+    "0",
+    "false",
+    "no",
+)
+# Passed through to the server, for options it defines and this client does not:
+# a reasoning model's effort level, say. JSON object, e.g. {"reasoning_effort": "low"}.
+DEFAULT_LLAMA_EXTRA_BODY = os.environ.get("CIRCEX_LLAMA_EXTRA_BODY") or None
+
+
+def _json_object(content: str) -> str:
+    """The JSON object in a free-form reply.
+
+    Without a grammar a model may fence its answer or introduce it in prose, so
+    take the outermost braces rather than requiring the whole reply to parse.
+    """
+    fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", content, re.S)
+    if fenced:
+        return str(fenced.group(1))
+    start, end = content.find("{"), content.rfind("}")
+    return content[start : end + 1] if 0 <= start < end else content
 
 
 class LlamaServerExtractor(Extractor):
@@ -75,6 +102,8 @@ class LlamaServerExtractor(Extractor):
         session: Any | None = None,
         require_fields: bool = DEFAULT_LLAMA_REQUIRE_FIELDS,
         api_key: str | None = DEFAULT_LLAMA_API_KEY,
+        structured: bool = DEFAULT_LLAMA_STRUCTURED,
+        extra_body: dict[str, Any] | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._model_id = model_id
@@ -83,10 +112,17 @@ class LlamaServerExtractor(Extractor):
         self._session = session or requests  # injectable for tests
         self._require_fields = require_fields
         self._api_key = api_key
+        self._structured = structured
+        if extra_body is None and DEFAULT_LLAMA_EXTRA_BODY:
+            extra_body = json.loads(DEFAULT_LLAMA_EXTRA_BODY)
+        self._extra_body = extra_body or {}
 
     @property
     def extractor_id(self) -> str:
-        return f"llama-server:{self._model_id}"
+        # The mode belongs in the id: the same model constrained and unconstrained
+        # is two different extractors, and a cache must not confuse them.
+        suffix = "" if self._structured else ":free"
+        return f"llama-server:{self._model_id}{suffix}"
 
     @property
     def model_id(self) -> str:
@@ -189,26 +225,31 @@ class LlamaServerExtractor(Extractor):
             {"role": "system", "content": build_system_text()},
             *build_messages(circular),
         ]
+        payload: dict[str, Any] = {
+            "model": self._model_id,
+            "messages": messages,
+            "temperature": 0,
+            "max_tokens": DEFAULT_LLAMA_MAX_TOKENS,
+            **self._extra_body,
+        }
+        if self._structured:
+            payload["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "circular_extraction",
+                    # lean: scored fields only
+                    "schema": llm_grammar_schema(require_fields=self._require_fields),
+                },
+            }
         resp = self._session.post(
             f"{self._base_url}/v1/chat/completions",
-            json={
-                "model": self._model_id,
-                "messages": messages,
-                "temperature": 0,
-                "max_tokens": DEFAULT_LLAMA_MAX_TOKENS,
-                "response_format": {
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": "circular_extraction",
-                        # lean: scored fields only
-                        "schema": llm_grammar_schema(require_fields=self._require_fields),
-                    },
-                },
-            },
+            json=payload,
             headers=self._headers,
             timeout=self._timeout,
         )
         resp.raise_for_status()
-        content = resp.json()["choices"][0]["message"]["content"]
+        content = resp.json()["choices"][0]["message"]["content"] or ""
+        if not self._structured:
+            content = _json_object(content)
         payload = OllamaExtractor._parse_and_strip_meta(content)
         return OllamaExtractor._sanitize_payload(payload, body=circular.body)
