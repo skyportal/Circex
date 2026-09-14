@@ -53,10 +53,31 @@ def _clean(name: str) -> str:
     return re.sub(r"^the\s+", "", name.strip(), flags=re.IGNORECASE)
 
 
+# "calibrated against Pan-STARRS", "relative to the SDSS catalog": the survey
+# supplying the reference magnitudes is not the telescope that observed. Bounded
+# to the clause so the guard cannot reach back into a previous sentence.
+_CALIBRATION_CLAUSE_RE = re.compile(
+    r"(?:calibrat\w*|photometr\w+\s+zero\s*point|relative\s+to|with\s+respect\s+to"
+    r"|compared\s+(?:to|with)|reference\s+(?:star|catalog)\w*|against)"
+    r"\b[^.;\n]{0,80}$",
+    re.IGNORECASE,
+)
+
+
+def _in_calibration_clause(text: str, start: int) -> bool:
+    return _CALIBRATION_CLAUSE_RE.search(text[max(0, start - 100) : start]) is not None
+
+
 def parse_telescope_with_span(text: str) -> tuple[str, Span] | None:
     """The telescope the observation used, as written, or None."""
-    alias = _alias_pattern().search(text)
-    named = _NAMED_RE.search(text)
+    alias = next(
+        (m for m in _alias_pattern().finditer(text) if not _in_calibration_clause(text, m.start())),
+        None,
+    )
+    named = next(
+        (m for m in _NAMED_RE.finditer(text) if not _in_calibration_clause(text, m.start(1))),
+        None,
+    )
 
     # A known name wins wherever the two overlap: the generic pattern tends to
     # take a qualifier with it ("2.5-m Nordic Optical"). Otherwise whichever is

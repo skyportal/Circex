@@ -126,6 +126,23 @@ def test_infer_bandpass_unfiltered_is_the_open_response() -> None:
     assert infer_bandpass("C") == "ps1::open"
 
 
+def test_underscored_error_column_does_not_claim_the_mag_column() -> None:
+    """ "mag_err" is the error, not a second magnitude: taking it as the mag
+    leaves "+/- 0.12" where the value should be and the row is lost."""
+    text = (
+        "|[date-obs(mid-time)] | Mid_t-T0(h) | exposure time (s) | band | mag (AB) | mag_err|\n"
+        "|--------------------|--------------|-------------------|------|----------|--------|\n"
+        "|2026-09-14T13:06:45 |  1.9         | 30x90s            | i    | 20.15    | +/- 0.12  |\n"
+    )
+    from circex.extract.regex.mag_table import parse_pipe_table_with_spans
+
+    rows = [r for r, _ in parse_pipe_table_with_spans(text)]
+    assert len(rows) == 1
+    assert rows[0].filter == "i"
+    assert rows[0].mag == 20.15
+    assert rows[0].mag_error == 0.12
+
+
 def test_hst_filter_written_in_lower_case_is_read_whole() -> None:
     """ "m_f125W" is one HST filter, not a bare W: reading it as unfiltered light
     would post a 1.25 um measurement as optical."""

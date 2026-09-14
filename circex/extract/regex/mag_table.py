@@ -695,9 +695,11 @@ def _classify_pipe_columns(cells: list[str]) -> dict[int, str]:
         t = tok.lower()
         if "filter" in t or t == "band":
             roles[i] = "filter"
-        elif re.search(r"mag\s*err|magerr|\berr", t):
+        elif re.search(r"mag[\s_.-]*err|(?<![a-z])err", t):
             # Checked BEFORE "mag": a "MagErr" column would otherwise classify as
             # a second mag column and overwrite the real one (ZTF/GROWTH template).
+            # "_" is a word character, so the separator set is spelt out rather
+            # than left to \b, which never fires inside "mag_err".
             roles[i] = "mag_err"
         elif "mag" in t:  # mag / magnitude / abmag / mag (ab)
             roles[i] = "mag"

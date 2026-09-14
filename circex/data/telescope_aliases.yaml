@@ -31,6 +31,7 @@ telescopes:
   # SVOM-era (ICARE examples)
   SVOM/VT: ["VT", "SVOM/VT", "SVOM VT"]
   COLIBRI: ["COLIBRI", "COLIBRI-VIS", "COLIBRI/VIS"]
+  SVOM/C-GFT: ["C-GFT", "SVOM/C-GFT", "SVOM C-GFT"]
 
 instruments:
   X-shooter: ["X-shooter", "XSHOOTER", "VLT/X-shooter"]
@@ -42,3 +43,6 @@ instruments:
   LRIS: ["LRIS", "Keck/LRIS"]
   FOCAS: ["FOCAS", "Subaru/FOCAS"]
   UVOT: ["UVOT", "Swift/UVOT"]
+  # C-GFT's two cameras: LATIOS at the prime focus, CATCH at the Cassegrain.
+  LATIOS: ["LATIOS", "C-GFT/LATIOS"]
+  CATCH: ["CATCH", "C-GFT/CATCH"]
