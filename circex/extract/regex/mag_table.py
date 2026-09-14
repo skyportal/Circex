@@ -37,7 +37,18 @@ _NIR: Final[frozenset[str]] = frozenset({"Y", "J", "H", "K", "Ks"})
 _WIDE: Final[frozenset[str]] = frozenset({"L"})
 
 _HST: Final[frozenset[str]] = frozenset(
-    {"F450W", "F555W", "F606W", "F702W", "F775W", "F814W", "F850LP", "F160W", "F110W"}
+    {
+        "F450W",
+        "F555W",
+        "F606W",
+        "F702W",
+        "F775W",
+        "F814W",
+        "F850LP",
+        "F110W",
+        "F125W",
+        "F160W",
+    }
 )
 _KNOWN_FILTERS: Final[frozenset[str]] = (
     _SLOAN
@@ -57,7 +68,7 @@ _PRIMES = "'\u2019\u02b9\u2032"
 
 # Single-mag patterns. Matches "r = 18.42 ± 0.05", "R=22.1+/-0.3", "K_s = 19.0",
 _FILTER_TOKEN = (
-    r"(?:F\d{3}[A-Z]{1,2}"
+    r"(?:[Ff]\d{3}[A-Za-z]{1,2}"
     r"|" + "|".join(_SVOM_VT) + r""
     r"|" + "|".join(_UVOT) + r""
     r"|" + "|".join(_UNFILTERED) + r""
@@ -95,7 +106,7 @@ _BARE_LIMIT_RE = re.compile(
 # value. The phrase welds the two together, so there is no pairing to guess.
 _BAND_PROSE_RE = re.compile(
     rf"""
-    (?<![A-Za-z])
+    (?<![A-Za-z0-9])
     (?P<filter>{_FILTER_TOKEN})
     \s*[-\s]?\s*band\s+
     (?:AB\s+|Vega\s+)?
@@ -123,7 +134,7 @@ _LIMITING_MAG_RE = re.compile(
 
 # "in R-band", "the r' filter": the band a bare limit refers to.
 _BAND_CONTEXT_RE = re.compile(
-    rf"(?<![A-Za-z])(?P<filter>{_FILTER_TOKEN})\s*[-\s]?\s*(?:band|filter)\b",
+    rf"(?<![A-Za-z0-9])(?P<filter>{_FILTER_TOKEN})\s*[-\s]?\s*(?:band|filter)\b",
     re.IGNORECASE,
 )
 
@@ -131,7 +142,7 @@ _BAND_CONTEXT_RE = re.compile(
 # upper limits: "r > 22.5", "m > 22 (3-sigma)".
 _DETECTION_RE = re.compile(
     rf"""
-    (?<![A-Za-z])                          # not preceded by a letter (avoid "Ar=...")
+    (?<![A-Za-z0-9])                       # mid-token letters are not filters ("Ar=", "f125W")
     (?P<filter>{_FILTER_TOKEN})            # filter
     \s*[=~]\s*
     (?P<mag>\d{{1,2}}\.\d{{1,3}})              # magnitude
@@ -142,7 +153,7 @@ _DETECTION_RE = re.compile(
 
 _UPPER_LIMIT_RE = re.compile(
     rf"""
-    (?<![A-Za-z])
+    (?<![A-Za-z0-9])
     (?P<filter>{_FILTER_TOKEN})
     \s*>\s*
     (?P<limit>\d{{1,2}}\.\d{{1,3}})
@@ -161,7 +172,7 @@ _UPPER_LIMIT_RE = re.compile(
 # common single-detection line the column-split parser drops.
 _SPACED_DETECTION_RE = re.compile(
     rf"""
-    (?<![A-Za-z])
+    (?<![A-Za-z0-9])
     (?P<filter>{_FILTER_TOKEN})
     \s+
     (?P<mag>\d{{1,2}}\.\d{{1,3}})
@@ -174,11 +185,17 @@ _SPACED_DETECTION_RE = re.compile(
 
 def normalize_filter(token: str) -> str:
     """Strip a Cousins 'c' suffix (Rc->R) or a prime marker (r'/rp->r)."""
+    # HST filters are written either way round ("F125W", "m_f125W").
+    if _HST_TOKEN_RE.fullmatch(token):
+        return token.upper()
     if len(token) == 2 and token[0] in "UBVRI" and token[1] == "c":
         return token[0]
     if len(token) == 2 and token[0] in "ugriz" and token[1] in "p" + _PRIMES:
         return token[0]
     return token
+
+
+_HST_TOKEN_RE: Final[re.Pattern[str]] = re.compile(r"[Ff]\d{3}[A-Za-z]{1,2}")
 
 
 # Circulars that state their system say so plainly, and it overrides the filter
@@ -274,12 +291,18 @@ _BANDPASS_CROSSWALK: Final[dict[str, str]] = {
     # Unfiltered. "ps1::open" is the open-filter response, so it records that
     # no filter was used rather than asserting a band: another telescope's
     # optics differ, but the alternative is discarding the measurement.
-    # CR and CV are deliberately absent -- those state clear light already
-    # calibrated to R or V, which is a claim about a photometric system and
-    # not the same thing as unfiltered.
+    # W is MASTER's white light, which names no target system.
     "clear": "ps1::open",
     "unfiltered": "ps1::open",
     "C": "ps1::open",
+    "W": "ps1::open",
+    # AAVSO's CR and CV: clear light the observer has already reduced to an R
+    # or V sequence, so the number is stated on that scale and belongs with it.
+    # The unfiltered response is far wider than either, leaving a colour term
+    # the observer absorbed and we cannot recover -- GCN 7657 reports CR=19.2
+    # and R=19.5 for one source -- so treat these as R and V of lesser accuracy.
+    "CR": "bessellr",
+    "CV": "bessellv",
     # 2MASS / NIR (Vega)
     # sncosmo carries no NIR Y, so this approximates it with the PS1 y that
     # sits ~60 nm blueward. Revisit once a Y band lands upstream.
@@ -356,7 +379,7 @@ def _in_ranges(pos: int, ranges: list[tuple[int, int]]) -> bool:
 # "our clear coadd images": an unfiltered token is itself the band, so it needs
 # no following "band"/"filter" the way a lettered one does.
 _UNFILTERED_CONTEXT_RE = re.compile(
-    r"(?<![A-Za-z])(?P<filter>" + "|".join(_UNFILTERED) + r")\s+"
+    r"(?<![A-Za-z0-9])(?P<filter>" + "|".join(_UNFILTERED) + r")\s+"
     r"(?:co-?add|stack|combined|image|exposure|frame)\w*",
     re.IGNORECASE,
 )

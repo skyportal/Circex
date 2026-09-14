@@ -126,6 +126,18 @@ def test_infer_bandpass_unfiltered_is_the_open_response() -> None:
     assert infer_bandpass("C") == "ps1::open"
 
 
+def test_hst_filter_written_in_lower_case_is_read_whole() -> None:
+    """ "m_f125W" is one HST filter, not a bare W: reading it as unfiltered light
+    would post a 1.25 um measurement as optical."""
+    rows = parse_single_mags("Source C has an estimated m_f125W ~ 26.8 AB mag.")
+    assert [r.filter for r in rows] == ["F125W"]
+    assert infer_bandpass("F125W") == "f125w"
+
+
+def test_master_white_light_is_the_open_response() -> None:
+    assert infer_bandpass("W") == "ps1::open"
+
+
 def test_single_mag_populates_bandpass() -> None:
     rows = parse_single_mags("The OT is at r = 18.42 ± 0.05 mag.")
     r_rows = [p for p in rows if p.filter == "r"]
@@ -711,10 +723,11 @@ def test_unfiltered_light_records_that_no_filter_was_used():
     assert infer_bandpass("C") == "ps1::open"
 
 
-def test_clear_calibrated_to_a_band_is_not_called_unfiltered():
-    """CR and CV state a photometric system the observer transformed into, which
-    is a different claim from "no filter"."""
+def test_clear_calibrated_to_a_band_takes_that_band_not_the_open_response():
+    """CR and CV state the system the observer reduced to, so they land on R and
+    V rather than with the genuinely unfiltered rows."""
     from circex.extract.regex.mag_table import infer_bandpass
 
-    assert infer_bandpass("CR") is None
-    assert infer_bandpass("CV") is None
+    assert infer_bandpass("CR") == "bessellr"
+    assert infer_bandpass("CV") == "bessellv"
+    assert infer_bandpass("unfiltered") == "ps1::open"
