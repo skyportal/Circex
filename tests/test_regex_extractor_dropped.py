@@ -22,7 +22,9 @@ def _extraction(**row):
 
 def test_row_without_a_bandpass_is_dropped_and_counted():
     actions = to_actions(
-        _extraction(filter="clear", obs_mjd=61195.0, mag=19.0),
+        # CR is clear light calibrated to R: a photometric-system claim we do
+        # not translate, so it still has no bandpass to post with
+        _extraction(filter="CR", obs_mjd=61195.0, mag=19.0),
         default_instrument_id=4,
     )
     assert actions.photometry == []

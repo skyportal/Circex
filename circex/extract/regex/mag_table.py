@@ -271,6 +271,15 @@ _BANDPASS_CROSSWALK: Final[dict[str, str]] = {
     "F110W": "f110w",
     "F125W": "f125w",
     "F160W": "f160w",
+    # Unfiltered. "ps1::open" is the open-filter response, so it records that
+    # no filter was used rather than asserting a band: another telescope's
+    # optics differ, but the alternative is discarding the measurement.
+    # CR and CV are deliberately absent -- those state clear light already
+    # calibrated to R or V, which is a claim about a photometric system and
+    # not the same thing as unfiltered.
+    "clear": "ps1::open",
+    "unfiltered": "ps1::open",
+    "C": "ps1::open",
     # 2MASS / NIR (Vega)
     # sncosmo carries no NIR Y, so this approximates it with the PS1 y that
     # sits ~60 nm blueward. Revisit once a Y band lands upstream.

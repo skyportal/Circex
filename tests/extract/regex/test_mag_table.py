@@ -120,9 +120,10 @@ def test_infer_bandpass_nir() -> None:
     assert infer_bandpass("Ks") == "2massks"
 
 
-def test_infer_bandpass_unfiltered_is_none() -> None:
-    assert infer_bandpass("clear") is None
-    assert infer_bandpass("C") is None
+def test_infer_bandpass_unfiltered_is_the_open_response() -> None:
+    """Unfiltered light is recorded as such rather than discarded."""
+    assert infer_bandpass("clear") == "ps1::open"
+    assert infer_bandpass("C") == "ps1::open"
 
 
 def test_single_mag_populates_bandpass() -> None:
@@ -699,3 +700,21 @@ def test_a_row_whose_magnitude_column_is_misread_is_dropped():
         "| DG19ftnb | 167.595543 | -4.358810 | r | 0.08 | 20.39 |\n"
     )
     assert parse_pipe_table_with_spans(body) == []
+
+
+def test_unfiltered_light_records_that_no_filter_was_used():
+    """ps1::open is the open-filter response, the honest home for clear light."""
+    from circex.extract.regex.mag_table import infer_bandpass
+
+    assert infer_bandpass("clear") == "ps1::open"
+    assert infer_bandpass("unfiltered") == "ps1::open"
+    assert infer_bandpass("C") == "ps1::open"
+
+
+def test_clear_calibrated_to_a_band_is_not_called_unfiltered():
+    """CR and CV state a photometric system the observer transformed into, which
+    is a different claim from "no filter"."""
+    from circex.extract.regex.mag_table import infer_bandpass
+
+    assert infer_bandpass("CR") is None
+    assert infer_bandpass("CV") is None
