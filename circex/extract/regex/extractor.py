@@ -44,6 +44,7 @@ from circex.extract.regex.retraction import is_retraction
 from circex.extract.regex.telescope import parse_telescope_with_span
 from circex.extract.regex.xray import parse_xray_with_spans
 from circex.extract.timing import (
+    resolve_inline_dates,
     resolve_inline_offsets,
     resolve_object_epochs,
     resolve_observation_epoch,
@@ -290,5 +291,6 @@ class RegexExtractor(Extractor):
         resolve_inline_offsets(extraction, circular.body, circular.trigger_time)
         resolve_relative_epochs(extraction, circular.trigger_time)
         resolve_stated_window(extraction, circular.body)
+        resolve_inline_dates(extraction, circular.body, circular.published_at)
         _apply_telescope(extraction, body, provenance)
         return extraction

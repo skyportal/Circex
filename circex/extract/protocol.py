@@ -8,7 +8,7 @@ implementations without changes.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Protocol, runtime_checkable
 
 from circex.schema import CircularExtraction
@@ -29,6 +29,16 @@ class Circular:
     # Caller-supplied (the GCN broker has it); NOT created_on, which is the
     # circular's submission time. None when unknown — relative epochs stay null.
     trigger_time: datetime | None = None
+
+    @property
+    def published_at(self) -> datetime | None:
+        """When the circular was issued, which is the year a bare "Sep 25" means."""
+        if self.created_on is None:
+            return None
+        try:
+            return datetime.fromtimestamp(self.created_on / 1000, UTC)
+        except (OverflowError, OSError, ValueError):
+            return None
 
     @classmethod
     def from_record(cls, record: dict[str, Any]) -> Circular:

@@ -330,6 +330,62 @@ def resolve_inline_offsets(
         row.obs_mjd, row.obs_time = pair
 
 
+_INLINE_MONTH = r"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*"
+# "Sep 25.171   16.44   Rc   300 x 4   >18.9": the older tables give the month
+# and a decimal day beside each magnitude and leave the year to the reader.
+_INLINE_DATE_RE = re.compile(rf"\b({_INLINE_MONTH})\s+(\d{{1,2}}(?:\.\d+)?)\b", re.IGNORECASE)
+
+
+def _year_for(month_day: str, published: datetime) -> tuple[float, str] | None:
+    """`month_day` in the year that puts it shortly before publication.
+
+    A circular published in January reports on December, so the previous year
+    is tried as well. The window back is a season rather than a year: reports
+    follow their observation by days or weeks, and allowing a year lets a date
+    land in the wrong one -- measured against the burst dates the subjects
+    name, widening 90 days to 400 bought no extra rows and six wrong ones.
+    """
+    best = None
+    for year in (published.year, published.year - 1):
+        pair = epoch_from_absolute(f"{year} {month_day}")
+        if pair is None:
+            continue
+        published_mjd = _to_pair(published)[0]
+        if not (-2.0 <= published_mjd - pair[0] <= 90.0):
+            continue
+        if best is None or pair[0] > best[0]:
+            best = pair
+    return best
+
+
+def resolve_inline_dates(
+    extraction: CircularExtraction, body: str, published: datetime | None
+) -> None:
+    """Date each row from a month and day written on its own line, in place.
+
+    Only the year is missing from these, and only the circular's own date
+    supplies it. A row is timed when exactly one such date shares its line, the
+    same rule inline offsets are held to.
+    """
+    if published is None or not extraction.photometry:
+        return
+    for row in extraction.photometry:
+        if row.obs_mjd is not None or row.obs_time is not None:
+            continue
+        value = row.mag if row.mag is not None else row.limiting_mag
+        if value is None:
+            continue
+        line = _line_containing(body, value)
+        if line is None:
+            continue
+        found = _INLINE_DATE_RE.findall(line)
+        if len(found) != 1:
+            continue
+        pair = _year_for(f"{found[0][0]} {found[0][1]}", published)
+        if pair is not None:
+            row.obs_mjd, row.obs_time = pair
+
+
 def _line_containing(body: str, value: float) -> str | None:
     """The one line stating this magnitude, or None if it is not unique."""
     token = f"{value:g}"

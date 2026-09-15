@@ -493,3 +493,51 @@ def test_a_window_does_not_overwrite_an_epoch_a_row_already_has():
     )
     resolve_stated_window(extraction, "from 2016/03 28.14 to 2016/03 28.39 UTC")
     assert extraction.photometry[0].obs_mjd == 57000.0
+
+
+def test_a_month_and_day_beside_a_magnitude_takes_the_year_from_publication():
+    """The older tables write "Sep 25.171" against each row and leave the year
+    to the reader, who has the circular's own date."""
+    from datetime import UTC, datetime
+
+    from circex.extract.timing import resolve_inline_dates
+    from circex.schema import CircularExtraction, ExtractionMeta, PhotometryExt
+
+    extraction = CircularExtraction(
+        circular_id=2833,
+        photometry=[
+            PhotometryExt(filter="Rc", limiting_mag=18.9),
+            PhotometryExt(filter="Ic", limiting_mag=20.6),
+        ],
+        extraction_meta=ExtractionMeta(extractor="test"),
+    )
+    body = (
+        "Sep 25.171  16.44  Rc  300 x 4  >18.9   0.9m SARA\n"
+        "Sep 25.191  16.89  Ic  300 x 4  >20.6   0.9m SARA"
+    )
+    resolve_inline_dates(extraction, body, datetime(2004, 11, 8, tzinfo=UTC))
+    assert [r.obs_time[:10] for r in extraction.photometry] == [
+        "2004-09-25",
+        "2004-09-25",
+    ]
+    # each row keeps its own decimal day rather than sharing one epoch
+    assert extraction.photometry[0].obs_mjd < extraction.photometry[1].obs_mjd
+
+
+def test_a_december_report_published_in_january_takes_the_earlier_year():
+    from datetime import UTC, datetime
+
+    from circex.extract.timing import _year_for
+
+    pair = _year_for("Dec 28.5", datetime(2005, 1, 6, tzinfo=UTC))
+    assert pair is not None and pair[1].startswith("2004-12-28")
+
+
+def test_a_date_a_season_before_publication_is_not_dated():
+    """Reports follow their observation by weeks; a wider window only lets the
+    year land wrong."""
+    from datetime import UTC, datetime
+
+    from circex.extract.timing import _year_for
+
+    assert _year_for("Jan 5.0", datetime(2005, 11, 8, tzinfo=UTC)) is None
