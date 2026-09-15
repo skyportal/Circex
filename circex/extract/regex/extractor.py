@@ -48,6 +48,7 @@ from circex.extract.timing import (
     resolve_object_epochs,
     resolve_observation_epoch,
     resolve_relative_epochs,
+    resolve_stated_window,
 )
 from circex.schema import (
     CircularExtraction,
@@ -288,5 +289,6 @@ class RegexExtractor(Extractor):
         )
         resolve_inline_offsets(extraction, circular.body, circular.trigger_time)
         resolve_relative_epochs(extraction, circular.trigger_time)
+        resolve_stated_window(extraction, circular.body)
         _apply_telescope(extraction, body, provenance)
         return extraction

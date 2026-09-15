@@ -438,3 +438,58 @@ def test_a_paragraph_naming_two_objects_times_neither():
     )
     assert resolve_object_epochs(extraction, body) == set()
     assert all(p.obs_time is None for p in extraction.photometry)
+
+
+def test_a_stated_observing_window_dates_the_rows_it_covers():
+    """RATIR gives the window the whole set of bands was stacked over rather
+    than an epoch per row, so the rows take its mid-point."""
+    from circex.extract.timing import resolve_stated_window
+    from circex.schema import CircularExtraction, ExtractionMeta, PhotometryExt
+
+    extraction = CircularExtraction(
+        circular_id=19243,
+        photometry=[
+            PhotometryExt(filter="r", mag=23.84),
+            PhotometryExt(filter="i", mag=23.29),
+        ],
+        extraction_meta=ExtractionMeta(extractor="test"),
+    )
+    resolve_stated_window(
+        extraction,
+        "observed from 2016/03 28.14 to 2016/03 28.39 UTC (17.98 to 24.15 hours "
+        "after the BAT trigger)",
+    )
+    assert all(abs(r.obs_mjd - 57475.265) < 1e-6 for r in extraction.photometry)
+    assert all(r.obs_time.startswith("2016-03-28T06:21") for r in extraction.photometry)
+
+
+def test_two_windows_leave_the_rows_undated():
+    """Which band came from which night is not something to guess at."""
+    from circex.extract.timing import resolve_stated_window
+    from circex.schema import CircularExtraction, ExtractionMeta, PhotometryExt
+
+    extraction = CircularExtraction(
+        circular_id=1,
+        photometry=[PhotometryExt(filter="r", mag=23.8)],
+        extraction_meta=ExtractionMeta(extractor="test"),
+    )
+    resolve_stated_window(
+        extraction,
+        "from 2016/03 28.14 to 2016/03 28.39 UTC and again from 2016/03 29.10 to 2016/03 29.20 UTC",
+    )
+    assert extraction.photometry[0].obs_mjd is None
+
+
+def test_a_window_does_not_overwrite_an_epoch_a_row_already_has():
+    from circex.extract.timing import resolve_stated_window
+    from circex.schema import CircularExtraction, ExtractionMeta, PhotometryExt
+
+    extraction = CircularExtraction(
+        circular_id=1,
+        photometry=[
+            PhotometryExt(filter="r", mag=23.8, obs_mjd=57000.0, obs_time="2014-11-22T00:00:00Z")
+        ],
+        extraction_meta=ExtractionMeta(extractor="test"),
+    )
+    resolve_stated_window(extraction, "from 2016/03 28.14 to 2016/03 28.39 UTC")
+    assert extraction.photometry[0].obs_mjd == 57000.0

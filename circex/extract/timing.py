@@ -337,6 +337,45 @@ def _line_containing(body: str, value: float) -> str | None:
     return hits[0] if len(hits) == 1 else None
 
 
+# "from 2016/03 28.14 to 2016/03 28.39 UTC": RATIR and others state the window
+# the whole set of bands was stacked over, rather than an epoch per row. The
+# date forms here are the ones epoch_from_absolute already reads; only the
+# sentence around them is new.
+_WINDOW_DATE = r"20[0-4]\d[/-]\s?\d{1,2}[\s/-]\d{1,2}\.\d+"
+_STATED_WINDOW_RE = re.compile(
+    rf"\bfrom\s+(?P<start>{_WINDOW_DATE})\s+to\s+(?P<end>{_WINDOW_DATE})",
+    re.IGNORECASE,
+)
+
+
+def resolve_stated_window(extraction: CircularExtraction, body: str) -> None:
+    """Date rows from the one observing window the circular states, in place.
+
+    The measurement is the stack over that window, so its mid-point is the
+    epoch -- the same convention as a stated mid-exposure time. Applied only
+    when the body names a single window: several windows cannot be paired with
+    rows without guessing which band came from which.
+    """
+    if not extraction.photometry:
+        return
+    windows = set()
+    for m in _STATED_WINDOW_RE.finditer(body):
+        start = epoch_from_absolute(m.group("start"))
+        end = epoch_from_absolute(m.group("end"))
+        if start is None or end is None or end[0] < start[0]:
+            continue
+        windows.add((start[0], end[0]))
+    if len(windows) != 1:
+        return
+    (lo, hi) = next(iter(windows))
+    pair = normalize_pair((lo + hi) / 2.0, None)
+    if pair is None:
+        return
+    for row in extraction.photometry:
+        if row.obs_mjd is None and row.obs_time is None:
+            row.obs_mjd, row.obs_time = pair
+
+
 def resolve_relative_epochs(extraction: CircularExtraction, trigger_time: datetime | None) -> None:
     """Fill obs_mjd/obs_time on rows that lack an epoch, in place.
 
