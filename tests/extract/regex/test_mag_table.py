@@ -786,3 +786,48 @@ def test_clear_calibrated_to_a_band_takes_that_band_not_the_open_response():
     assert infer_bandpass("CR") == "bessellr"
     assert infer_bandpass("CV") == "bessellv"
     assert infer_bandpass("unfiltered") == "ps1::open"
+
+
+def test_a_julian_date_column_dates_the_row() -> None:
+    """Swope heads its epoch column JD and writes a bare number, which is 2.4
+    million days off the Modified scale everything downstream uses."""
+    from circex.extract.regex.mag_table import parse_pipe_table_with_spans
+
+    rows = [
+        r
+        for r, _ in parse_pipe_table_with_spans(
+            "|      ID   |      JD       | filter |     magnitude      |\n"
+            "| AT2024hfq |  2460426.565  |   i    |   20.97 +/- 0.14   |\n"
+        )
+    ]
+    assert len(rows) == 1
+    assert rows[0].mag == 20.97
+    assert rows[0].obs_mjd is not None
+    assert abs(rows[0].obs_mjd - 60426.065) < 1e-3
+    assert rows[0].obs_time.startswith("2024-04-26")
+
+
+def test_a_modified_julian_date_column_is_taken_as_it_stands() -> None:
+    from circex.extract.regex.mag_table import parse_pipe_table_with_spans
+
+    rows = [
+        r
+        for r, _ in parse_pipe_table_with_spans(
+            "Telescope | Filter | MJD | Exposure | Magnitude | avg. Seeing\n"
+            "LOT | r | 60715.463 | 300sec * 6 | > 20.33 | 1.61\n"
+        )
+    ]
+    assert len(rows) == 1
+    assert rows[0].limiting_mag == 20.33
+    assert abs(rows[0].obs_mjd - 60715.463) < 1e-6
+
+
+def test_a_number_on_neither_scale_is_not_an_epoch() -> None:
+    """Only the two ranges a date can sit in are accepted, so a mislabelled
+    header cannot place an observation thousands of years out."""
+    from circex.extract.regex.mag_table import _epoch_from_number
+
+    assert _epoch_from_number("60715.463") is not None
+    assert _epoch_from_number("2460426.565") is not None
+    assert _epoch_from_number("300") is None
+    assert _epoch_from_number("1234567") is None

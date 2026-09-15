@@ -771,6 +771,10 @@ def _classify_pipe_columns(cells: list[str]) -> dict[int, str]:
             # The IAU designation is the object's name; a survey's internal one
             # is an alias for it, so the two columns are kept apart.
             roles[i] = "iau_name" if re.search(r"\biau\b|\btns\b", t) else "name"
+        elif re.fullmatch(r"m?jd(\s*[\(\[].*)?", t):
+            # A bare number rather than a written date: Swope heads it JD, the
+            # Kinder tables MJD. Which of the two it is comes from the value.
+            roles[i] = "numeric_epoch"
         elif re.search(r"t0|tgrb|t-t|tmid", t) and re.search(r"h\b|hour|hr", t):
             roles[i] = "rel_hours"
         elif re.search(r"mid-?time|date|\but\b|utc", t):
@@ -789,6 +793,30 @@ def _decimal_degrees(cell: str | None) -> float | None:
         return None
     m = re.fullmatch(r"([+-]?\d{1,3}(?:\.\d+)?)", cell.strip())
     return float(m.group(1)) if m else None
+
+
+# A Julian Date is about 2.4 million; a Modified one is five figures. Nothing
+# observed sits anywhere near between, so the number says which it is and a
+# mislabelled header cannot put an observation 2.4 million days out.
+_MJD_RANGE = (40000.0, 80000.0)  # 1968 to 2065
+_JD_RANGE = (2440000.0, 2480000.0)
+
+
+def _epoch_from_number(cell: str | None) -> tuple[float, str] | None:
+    """(obs_mjd, obs_time) from a bare JD or MJD cell, or None.
+
+    A Modified date is passed through as it stands; epoch_from_absolute already
+    reads one. A Julian date is shifted onto the same scale first.
+    """
+    m = re.search(r"\d{4,7}(?:\.\d+)?", cell or "")
+    if not m:
+        return None
+    value = float(m.group())
+    if _JD_RANGE[0] <= value <= _JD_RANGE[1]:
+        value -= 2400000.5
+    elif not (_MJD_RANGE[0] <= value <= _MJD_RANGE[1]):
+        return None
+    return epoch_from_absolute(f"{value:.6f}")
 
 
 def _parse_pipe_row(
@@ -856,6 +884,12 @@ def _parse_pipe_row(
             return None
     obs_mjd = obs_time = None
     if by.get("abs_time") and (ep := epoch_from_absolute(by["abs_time"])) is not None:
+        obs_mjd, obs_time = ep
+    if (
+        obs_mjd is None
+        and by.get("numeric_epoch")
+        and (ep := _epoch_from_number(by["numeric_epoch"])) is not None
+    ):
         obs_mjd, obs_time = ep
     if obs_mjd is None and by.get("rel_hours") and trigger_time is not None:
         num = re.search(r"[-+]?\d+(?:\.\d+)?", by["rel_hours"])
