@@ -171,6 +171,16 @@ def test_a_limit_is_not_counted_twice() -> None:
     assert len([r for r in rows if r.limiting_mag == 22.5]) == 1
 
 
+def test_a_url_query_string_is_not_photometry() -> None:
+    """Cutout links carry "&w=15.0", a width in arcmin, which reads exactly like
+    a magnitude once w is a filter."""
+    rows = parse_single_mags(
+        "Images at http://archive.stsci.edu/cgi-bin/dss_search?v=poss1_blue"
+        "&h=15.0&w=15.0&f=gif are available. The OT is at w = 20.5 mag."
+    )
+    assert [(r.filter, r.mag) for r in rows] == [("w", 20.5)]
+
+
 def test_hst_filter_written_in_lower_case_is_read_whole() -> None:
     """ "m_f125W" is one HST filter, not a bare W: reading it as unfiltered light
     would post a 1.25 um measurement as optical."""

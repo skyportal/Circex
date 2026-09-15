@@ -403,3 +403,23 @@ def test_gotos_wide_l_maps_to_its_own_bandpass():
     # borrowing GOTO's band.
     elsewhere = PhotometryExt(filter="L", mag=20.28, telescope="LCO")
     assert _effective_band(elsewhere)[0] is None
+
+
+def test_survey_letters_resolve_against_the_telescope_that_wrote_them():
+    """o, c and w name real passbands at one telescope and something else at
+    the next, so the letter alone is not enough to place them."""
+    from circex.bot.skyportal_map import _effective_band
+    from circex.schema import PhotometryExt
+
+    def band(telescope, filt):
+        return _effective_band(PhotometryExt(filter=filt, mag=20.0, telescope=telescope))[0]
+
+    assert band("ATLAS", "o") == "atlaso"
+    assert band("ATLAS", "c") == "atlasc"
+    # lower-case c turns up mostly in Swift circulars, where it is not cyan
+    assert band("Swift", "c") is None
+    assert band("Pan-STARRS", "w") == "ps1::w"
+    # DDOTI's w is its own clear filter, not Pan-STARRS's passband
+    assert band("DDOTI", "w") is None
+    # MeerLICHT's wide q has no curve in sncosmo to point at
+    assert band("MeerLICHT", "q") is None

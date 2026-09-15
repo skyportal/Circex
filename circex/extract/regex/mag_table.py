@@ -32,9 +32,10 @@ _BESSEL: Final[frozenset[str]] = frozenset({"U", "B", "V", "R", "I"})
 # that the lowercase token means. Case is the only thing telling them apart.
 _NIR: Final[frozenset[str]] = frozenset({"Y", "J", "H", "K", "Ks"})
 
-# Wide survey filters with no sncosmo equivalent. Recognised so their rows are
-# read and attributed, with bandpass left unset rather than guessed.
-_WIDE: Final[frozenset[str]] = frozenset({"L"})
+# Wide and survey-specific filters. "q" is MeerLICHT/BlackGEM's wide band, which
+# sncosmo carries no curve for, so it is recognised and left without a bandpass
+# rather than approximated by a neighbour.
+_WIDE: Final[frozenset[str]] = frozenset({"L", "o", "c", "w", "q"})
 
 _HST: Final[frozenset[str]] = frozenset(
     {
@@ -72,7 +73,7 @@ _FILTER_TOKEN = (
     r"|" + "|".join(_SVOM_VT) + r""
     r"|" + "|".join(_UVOT) + r""
     r"|" + "|".join(_UNFILTERED) + r""
-    r"|[UBVRI]c|[ugriz][p" + _PRIMES + r"]|[UBVRIJHKYLgrizyuCW]s?)"
+    r"|[UBVRI]c|[ugriz][p" + _PRIMES + r"]|[UBVRIJHKYLgrizyuCWocwq]s?)"
 )
 
 # "5-sigma upper limit: J = 19.07" states a limit in the syntax of a detection.
@@ -377,6 +378,17 @@ def _errorbox_ranges(text: str) -> list[tuple[int, int]]:
     return [(m.start(), m.end()) for m in _ERRORBOX_RE.finditer(text)]
 
 
+# Circulars link to image cutouts, and a query string reads like photometry:
+# "dss_search?...&h=15.0&w=15.0&f=gif" offers w = 15.0, which is a width in
+# arcmin. Nothing inside a URL is a measurement.
+_URL_RE: Final[re.Pattern[str]] = re.compile(r"\b(?:https?|ftp)://\S+", re.IGNORECASE)
+
+
+def _url_ranges(text: str) -> list[tuple[int, int]]:
+    """Char ranges covered by URLs, whose parameters are not measurements."""
+    return [(m.start(), m.end()) for m in _URL_RE.finditer(text)]
+
+
 def _contaminant_ranges(text: str) -> list[tuple[int, int]]:
     """Char ranges of clauses about non-transient objects (galaxy / reference star).
 
@@ -429,7 +441,7 @@ def parse_single_mags_with_spans(text: str) -> list[tuple[PhotometryExt, Span]]:
     rows: list[tuple[PhotometryExt, Span]] = []
     consumed: list[tuple[int, int]] = []  # char ranges already claimed
     # non-transient (galaxy / ref-star) clauses, and error-box radii
-    excluded = _contaminant_ranges(text) + _errorbox_ranges(text)
+    excluded = _contaminant_ranges(text) + _errorbox_ranges(text) + _url_ranges(text)
 
     for match in _DETECTION_RE.finditer(text):
         raw = match.group("filter")

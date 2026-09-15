@@ -288,8 +288,17 @@ def to_actions(
 # A wide filter only means something alongside its telescope: GOTO's L has a
 # SkyPortal bandpass of its own, and the same letter from anywhere else does
 # not, so the pair is what maps rather than the filter alone.
+# A bare letter means different things at different telescopes, so these are
+# keyed by both. Left out deliberately: lower-case c is ATLAS cyan but turns up
+# mostly in Swift circulars meaning something else, DDOTI's w is its own clear
+# filter rather than Pan-STARRS's, and MeerLICHT's q has no curve in sncosmo.
 _TELESCOPE_BANDPASS: Final[dict[tuple[str, str], tuple[str, str]]] = {
     ("goto", "L"): ("gotol", "ab"),
+    ("atlas", "o"): ("atlaso", "ab"),
+    ("atlas", "c"): ("atlasc", "ab"),
+    ("pan-starrs", "w"): ("ps1::w", "ab"),
+    ("panstarrs", "w"): ("ps1::w", "ab"),
+    ("pan-starrs1", "w"): ("ps1::w", "ab"),
 }
 
 
