@@ -143,6 +143,34 @@ def test_underscored_error_column_does_not_claim_the_mag_column() -> None:
     assert rows[0].mag_error == 0.12
 
 
+def test_upper_limit_reached_across_an_exposure_column() -> None:
+    """SVOM/VT rules its header with pipes but lays the rows out by eye, so the
+    limit sits a column away from the band it belongs to."""
+    rows = parse_single_mags(
+        "Mid time | Band | Exposure Time |  3-sigma upper limit\n"
+        "1.1  hr    VT_B     50*50  sec       > 23.6 mag\n"
+        "1.0  hr    VT_R     50*50  sec       > 23.5 mag\n"
+    )
+    assert [(r.filter, r.limiting_mag) for r in rows] == [
+        ("VT_B", 23.6),
+        ("VT_R", 23.5),
+    ]
+    assert all(r.mag is None for r in rows)
+
+
+def test_a_band_letter_inside_a_word_is_not_a_limit() -> None:
+    """ "no source in R down to > 21.3" states an R limit, not an i one."""
+    rows = parse_single_mags("no source in R down to > 21.3")
+    assert [(r.filter, r.limiting_mag) for r in rows] == [("R", 21.3)]
+
+
+def test_a_limit_is_not_counted_twice() -> None:
+    """The plain form is read by the direct pattern; the spaced one must not
+    also claim it."""
+    rows = parse_single_mags("The afterglow was not detected, r > 22.5 mag.")
+    assert len([r for r in rows if r.limiting_mag == 22.5]) == 1
+
+
 def test_hst_filter_written_in_lower_case_is_read_whole() -> None:
     """ "m_f125W" is one HST filter, not a bare W: reading it as unfiltered light
     would post a 1.25 um measurement as optical."""

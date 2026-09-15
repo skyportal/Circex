@@ -162,6 +162,25 @@ _UPPER_LIMIT_RE = re.compile(
     re.VERBOSE | re.IGNORECASE,
 )
 
+# "1.1 hr   VT_B   50*50 sec   > 23.6 mag": a table whose header is pipe-ruled
+# but whose rows are laid out by eye, so neither the pipe parser nor a column
+# split reaches them. The filter and its limit sit on one line with the exposure
+# between, so the pair is read directly. The gap may not cross a comma, an "="
+# or another filter's clause, which keeps this from pairing one row's band with
+# the next one's limit.
+_SPACED_UPPER_LIMIT_RE = re.compile(
+    rf"""
+    (?<![A-Za-z0-9])
+    (?P<filter>{_FILTER_TOKEN})
+    (?![A-Za-z])                       # "in" must not read as the i band
+    (?P<gap>[^|\n<>=,;]{{1,40}}?)
+    >\s*
+    (?P<limit>\d{{1,2}}\.\d{{1,3}})
+    """,
+    re.VERBOSE,
+)
+
+
 # Space-separated detection, as written in fixed-width single-row tables and
 # terse prose: "Rc     23.08 +/- 0.18", "r 19.5 ± 0.05". The mandatory +/- (or
 # ±) error term after a whitespace-separated mag is a strong precision guard —
@@ -508,7 +527,11 @@ def parse_single_mags_with_spans(text: str) -> list[tuple[PhotometryExt, Span]]:
             )
         )
 
+    # The direct "R > 21.3" form first, so a row it already covers is not also
+    # read by the spaced pattern and counted twice.
+    claimed: list[tuple[int, int]] = []
     for match in _UPPER_LIMIT_RE.finditer(text):
+        claimed.append((match.start(), match.end()))
         raw = match.group("filter")
         # Rc stays Rc; r' and rp fold to r. Checking the raw token first keeps a
         # Cousins band distinguishable from its Johnson counterpart.
@@ -576,6 +599,31 @@ def parse_single_mags_with_spans(text: str) -> list[tuple[PhotometryExt, Span]]:
                     limiting_mag=limit,
                     limiting_mag_sigma=float(stated_sigma) if stated_sigma else None,
                     is_detection=False,
+                    mag_system=infer_mag_system(filter_name),
+                    bandpass=infer_bandpass(filter_name),
+                ),
+                Span(start=match.start(), end=match.end(), snippet=match.group(0)),
+            )
+        )
+
+    for match in _SPACED_UPPER_LIMIT_RE.finditer(text):
+        if _in_ranges(match.start(), excluded) or _in_ranges(match.start(), claimed):
+            continue
+        raw = match.group("filter")
+        filter_name = raw if raw in _KNOWN_FILTERS else normalize_filter(raw)
+        if filter_name not in _KNOWN_FILTERS:
+            continue
+        limit = float(match.group("limit"))
+        if not _plausible_mag(filter_name, limit):
+            continue
+        rows.append(
+            (
+                PhotometryExt(
+                    filter=filter_name,
+                    limiting_mag=limit,
+                    # These tables state their sigma in the header, not the row,
+                    # so the row on its own does not say.
+                    limiting_mag_sigma=None,
                     mag_system=infer_mag_system(filter_name),
                     bandpass=infer_bandpass(filter_name),
                 ),
