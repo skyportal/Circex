@@ -299,6 +299,11 @@ _TELESCOPE_BANDPASS: Final[dict[tuple[str, str], tuple[str, str]]] = {
     ("pan-starrs", "w"): ("ps1::w", "ab"),
     ("panstarrs", "w"): ("ps1::w", "ab"),
     ("pan-starrs1", "w"): ("ps1::w", "ab"),
+    # UVOT's optical bands are its own, not Bessell's or Sloan's: without this
+    # its u would be read as sdssu, a different curve and a different system.
+    ("uvot", "v"): ("uvot::v", "vega"),
+    ("uvot", "b"): ("uvot::b", "vega"),
+    ("uvot", "u"): ("uvot::u", "vega"),
 }
 
 
@@ -316,8 +321,13 @@ def _effective_band(row: PhotometryExt) -> tuple[str | None, str]:
         return (row.bandpass or bandpass_for_frequency(row.frequency_ghz)), "ab"
     base = normalize_filter(row.filter) if row.filter else None
     telescope = (row.telescope_canonical or row.telescope or "").strip().lower()
-    if base and (pair := _TELESCOPE_BANDPASS.get((telescope, base))) is not None:
-        return pair
+    # The instrument is the sharper key where a row names one: Swift/UVOT
+    # canonicalizes to "Swift", which is too broad to hang a band on.
+    instrument = (row.instrument_canonical or row.instrument or "").strip().lower()
+    if base:
+        for source in (instrument, telescope):
+            if source and (pair := _TELESCOPE_BANDPASS.get((source, base))) is not None:
+                return pair
     band = infer_bandpass(base) if base else None
     if band is not None:
         system = infer_mag_system(base) if base else None

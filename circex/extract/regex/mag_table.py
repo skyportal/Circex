@@ -1059,6 +1059,123 @@ def _looks_like_fixedw_header(line: str) -> bool:
     )
 
 
+# Swift/UVOT reports every band as "filter Tstart Tstop Exposure Mag", with the
+# two times in seconds since the trigger. The epoch is the middle of the
+# exposure, so it needs T0; the rest of the row stands on its own.
+#
+# The filter names are UVOT's own -- its v, b and u are not Bessell's or Sloan's
+# -- so the telescope is recorded and skyportal_map resolves the band from it.
+_UVOT_FILTERS = "white|wh|uvw1|uvw2|uvm2|w1|w2|m2|v|b|u"
+_UVOT_LIMIT_WORDS: Final[re.Pattern[str]] = re.compile(
+    r"upper\s*limit|\bU\.?L\.?\b|non-?detection", re.IGNORECASE
+)
+# The three numbers are Tstart, Tstop and the exposure, and then the magnitude.
+# Anything after it is commentary -- "3-sigma UL", "uncertain detection" -- and
+# is not part of the measurement.
+_UVOT_TAIL = r"""
+    [ \t]+(?P<tstart>\d[\d,]*(?:\.\d+)?)
+    [ \t]+(?P<tstop>\d[\d,]*(?:\.\d+)?)
+    [ \t]+(?P<exp>\d[\d,]*(?:\.\d+)?)
+    [ \t]+(?P<limit>[<>][ \t]*)?(?P<mag>\d{1,2}\.\d{1,2})
+    (?:[ \t]*(?:\+/[-\u2212]|±|\+[-\u2212])?[ \t]*(?P<err>\d+\.\d{1,3}))?
+    (?:[ \t]+(?P<tail>\S.*?))?
+    [ \t]*$
+"""
+_UVOT_ROW_RE: Final[re.Pattern[str]] = re.compile(
+    rf"""^[ \t]*(?P<filter>{_UVOT_FILTERS})
+    (?:_?(?:fc|FC)|[ \t]*\([ \t]*fc[ \t]*\))?   # a band's finding-chart exposure
+    {_UVOT_TAIL}""",
+    re.VERBOSE | re.IGNORECASE,
+)
+# A band observed more than once lists the filter on the first row only.
+_UVOT_CONTINUATION_RE: Final[re.Pattern[str]] = re.compile(rf"""^[ \t]+{_UVOT_TAIL}""", re.VERBOSE)
+
+
+def _uvot_row(
+    match: re.Match[str], base: str, trigger_time: datetime | None
+) -> PhotometryExt | None:
+    """One row of the table, or None where the numbers do not hold together."""
+
+    def _num(name: str) -> float:
+        # the longer exposures are written with thousands separators
+        return float(match.group(name).replace(",", ""))
+
+    tstart, tstop = _num("tstart"), _num("tstop")
+    # Tstart before Tstop, and an exposure that fits inside the window they
+    # bracket: three numbers in a row are otherwise easy to come by.
+    if tstop <= tstart or _num("exp") > (tstop - tstart) + 1.0:
+        return None
+    value = float(match.group("mag"))
+    if not _plausible_mag(base, value):
+        return None
+    # Some tables mark the limit with ">", others only in the words beside it.
+    tail = match.groupdict().get("tail") or ""
+    is_limit = match.group("limit") is not None or _UVOT_LIMIT_WORDS.search(tail) is not None
+    epoch = (
+        epoch_from_offset(trigger_time, (tstart + tstop) / 2.0, "s")
+        if trigger_time is not None
+        else None
+    )
+    err = match.group("err")
+    return PhotometryExt(
+        filter=base,
+        mag=None if is_limit else value,
+        mag_error=None if is_limit or not err else float(err),
+        limiting_mag=value if is_limit else None,
+        is_detection=not is_limit,
+        telescope="Swift/UVOT",
+        instrument="UVOT",
+        mag_system=infer_mag_system(base),
+        bandpass=infer_bandpass(base),
+        obs_mjd=epoch[0] if epoch else None,
+        obs_time=epoch[1] if epoch else None,
+    )
+
+
+def parse_uvot_table_with_spans(
+    text: str, trigger_time: datetime | None = None
+) -> list[tuple[PhotometryExt, Span]]:
+    """Parse Swift/UVOT's filter/Tstart/Tstop/exposure table. Per-row Spans.
+
+    Rows are dated to the middle of their own exposure, which is what the two
+    times bracket. Without a trigger time they are still read -- the band and
+    the magnitude do not depend on it -- and left undated.
+    """
+    rows: list[tuple[PhotometryExt, Span]] = []
+    offset = 0
+    carried: str | None = None
+    for line in text.splitlines(keepends=True):
+        stripped = line.rstrip("\r\n")
+        match = _UVOT_ROW_RE.match(stripped)
+        if match is not None:
+            raw = match.group("filter").lower()
+            carried = {"wh": "white", "w1": "uvw1", "w2": "uvw2", "m2": "uvm2"}.get(raw, raw)
+            base = carried
+        elif carried is not None and (match := _UVOT_CONTINUATION_RE.match(stripped)):
+            base = carried
+        else:
+            # A blank line spaces a table out; anything else ends it, and with it
+            # the filter a later row would otherwise inherit from far away.
+            if stripped.strip():
+                carried = None
+            offset += len(line)
+            continue
+        row = _uvot_row(match, base, trigger_time)
+        if row is not None:
+            rows.append(
+                (
+                    row,
+                    Span(
+                        start=offset + match.start(),
+                        end=offset + match.end(),
+                        snippet=stripped.strip(),
+                    ),
+                )
+            )
+        offset += len(line)
+    return rows
+
+
 def parse_fixed_width_table_with_spans(
     text: str, trigger_time: datetime | None = None
 ) -> list[tuple[PhotometryExt, Span]]:

@@ -831,3 +831,67 @@ def test_a_number_on_neither_scale_is_not_an_epoch() -> None:
     assert _epoch_from_number("2460426.565") is not None
     assert _epoch_from_number("300") is None
     assert _epoch_from_number("1234567") is None
+
+
+def _uvot(text, trigger=None):
+    from circex.extract.regex.mag_table import parse_uvot_table_with_spans
+
+    return [r for r, _ in parse_uvot_table_with_spans(text, trigger)]
+
+
+def test_uvot_table_reads_detections_and_limits() -> None:
+    from datetime import UTC, datetime
+
+    rows = _uvot(
+        "white_FC            90          204          112         >17.0\n"
+        "white               90         4145          308         18.48  0.08\n"
+        "v                 4355         4555          197         >15.5\n",
+        datetime(2021, 7, 30, tzinfo=UTC),
+    )
+    assert [(r.filter, r.mag, r.limiting_mag) for r in rows] == [
+        ("white", None, 17.0),
+        ("white", 18.48, None),
+        ("v", None, 15.5),
+    ]
+    # dated to the middle of its own exposure, not its start
+    assert rows[1].obs_mjd is not None
+    assert all(r.instrument == "UVOT" for r in rows)
+
+
+def test_uvot_continuation_row_inherits_the_filter_above_it() -> None:
+    """A band observed twice names itself once."""
+    rows = _uvot(
+        "white        562        662       98      21.1  0.3\n"
+        "             875        975       98     >21.4       3-sigma UL\n"
+    )
+    assert [(r.filter, r.limiting_mag) for r in rows] == [
+        ("white", None),
+        ("white", 21.4),
+    ]
+
+
+def test_uvot_filter_is_not_inherited_across_prose() -> None:
+    rows = _uvot(
+        "white        562        662       98      21.1  0.3\n"
+        "The afterglow faded rapidly thereafter.\n"
+        "             875        975       98     >21.4\n"
+    )
+    assert len(rows) == 1
+
+
+def test_uvot_limit_stated_only_in_words_is_still_a_limit() -> None:
+    """Some tables write no ">" and say it beside the number instead; reading
+    one as a detection would turn a non-detection into a measurement."""
+    rows = _uvot("V         191   12,136     1118      20.8  3-sigma upper limit\n")
+    assert [(r.mag, r.limiting_mag) for r in rows] == [(None, 20.8)]
+
+
+def test_uvot_reads_times_written_with_thousands_separators() -> None:
+    rows = _uvot("uvw1       621   17,926      519      20.7  0.5    2.9\n")
+    assert [(r.filter, r.mag, r.mag_error) for r in rows] == [("uvw1", 20.7, 0.5)]
+
+
+def test_uvot_rejects_three_numbers_that_are_not_a_time_window() -> None:
+    """Tstart must precede Tstop, and the exposure must fit between them."""
+    assert _uvot("v    619    219    394    16.60  0.07\n") == []
+    assert _uvot("v    219    619    9999   16.60  0.07\n") == []

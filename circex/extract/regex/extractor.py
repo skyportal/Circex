@@ -28,6 +28,7 @@ from circex.extract.regex.mag_table import (
     parse_pipe_candidate_with_span,
     parse_pipe_table_with_spans,
     parse_single_mags_with_spans,
+    parse_uvot_table_with_spans,
     stated_mag_system,
 )
 from circex.extract.regex.radio import parse_radio_with_spans
@@ -196,6 +197,13 @@ class RegexExtractor(Extractor):
             or parse_mag_table_with_spans(body)
             or parse_single_mags_with_spans(body)
         )
+        # UVOT's own table is read separately rather than taking a turn in the
+        # chain above: it can match a few lines of a circular whose real table
+        # another parser reads in full, and first-match-wins would then lose the
+        # rest. Whichever reading is larger is the one the circular is offering.
+        uvot_hits = parse_uvot_table_with_spans(body, circular.trigger_time)
+        if len(uvot_hits) > len(photo_hits):
+            photo_hits = uvot_hits
         # Radio and X-ray rows are additive: they carry a flux density and an
         # energy flux, so neither competes with the magnitude parsers above.
         photo_hits = list(photo_hits) + parse_radio_with_spans(body) + parse_xray_with_spans(body)

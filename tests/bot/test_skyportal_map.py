@@ -423,3 +423,22 @@ def test_survey_letters_resolve_against_the_telescope_that_wrote_them():
     assert band("DDOTI", "w") is None
     # MeerLICHT's wide q has no curve in sncosmo to point at
     assert band("MeerLICHT", "q") is None
+
+
+def test_uvot_optical_bands_are_uvots_own():
+    """UVOT's v, b and u are not Bessell's or Sloan's; reading its u as sdssu
+    would be a different curve in a different system."""
+    from circex.bot.skyportal_map import _effective_band
+    from circex.schema import PhotometryExt
+
+    def band(filt):
+        return _effective_band(
+            PhotometryExt(filter=filt, mag=18.0, telescope="Swift/UVOT", instrument="UVOT")
+        )
+
+    assert band("v") == ("uvot::v", "vega")
+    assert band("b") == ("uvot::b", "vega")
+    assert band("u") == ("uvot::u", "vega")
+    assert band("white")[0] == "uvot::white"
+    # a ground-based u is still Sloan's
+    assert _effective_band(PhotometryExt(filter="u", mag=18.0, telescope="LCO"))[0] == "sdssu"
