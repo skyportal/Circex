@@ -57,14 +57,16 @@ _MID_TIME_RE = re.compile(
 
 # "approximately X hours after the trigger", "X minutes post-burst", "5.9d after
 # the Swift/BAT trigger". Circulars say "burst" as often as "trigger", and name
-# the instrument in between, so both are accepted.
+# the instrument in between, so both are accepted. "the GRB" and "the merger"
+# name the same instant. "the notice" and "the alert" deliberately do not: those
+# are issued after the event they describe, by seconds to minutes.
 _POST_TRIGGER_RE = re.compile(
     r"""
     \b(?P<value>\d+(?:\.\d+)?)\s*
     (?P<unit>ks|seconds?|secs?|minutes?|mins?|hours?|hrs?|days?|[smhd])\s+
     (?:
-        after\s+(?:the\s+)?(?:\S+\s+){0,2}?(?:trigger|burst|explosion)
-      | post[-\s]?(?:trigger|burst|explosion)
+        after\s+(?:the\s+)?(?:\S+\s+){0,2}?(?:trigger|burst|explosion|GRB|merger)
+      | post[-\s]?(?:trigger|burst|explosion|GRB|merger)
     )
     \b
     """,

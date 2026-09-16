@@ -62,3 +62,21 @@ def test_a_stated_mid_time_is_an_offset_from_the_trigger():
 
 def test_a_mid_time_already_tied_to_the_trigger_is_counted_once():
     assert len(parse_time_offsets("mid-time 38.66 min after the trigger")) == 1
+
+
+def test_an_offset_can_be_measured_from_the_grb_or_the_merger():
+    """Circulars name the event as often as they name the trigger."""
+    from circex.extract.regex.dates import parse_time_offsets
+
+    assert parse_time_offsets("(5.48 days after the GRB)")[0].value == 5.48
+    assert parse_time_offsets("2.3 days after the merger")[0].unit == "d"
+    assert parse_time_offsets("16.2 hours after the burst")[0].value == 16.2
+
+
+def test_a_notice_is_not_the_event_it_announces():
+    """A notice goes out seconds to minutes after the trigger, so an offset
+    measured from it is not an offset from T0."""
+    from circex.extract.regex.dates import parse_time_offsets
+
+    assert parse_time_offsets("12 s after the notice") == []
+    assert parse_time_offsets("3 hours after the alert") == []
