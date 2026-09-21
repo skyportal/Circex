@@ -14,6 +14,7 @@ from circex.extract.timing import (
     epoch_from_absolute,
     epoch_from_offset,
     normalize_pair,
+    parse_acquisition_epoch,
     parse_observation_epoch,
     resolve_inline_offsets,
     resolve_observation_epoch,
@@ -541,3 +542,23 @@ def test_a_date_a_season_before_publication_is_not_dated():
     from circex.extract.timing import _year_for
 
     assert _year_for("Jan 5.0", datetime(2005, 11, 8, tzinfo=UTC)) is None
+
+
+def test_acquisition_image_time_beats_the_spectrum_time():
+    # GCN 45675: the magnitudes come off the acquisition frame at 03:51:03;
+    # 04:00:42 is when the spectrum started, ten minutes later.
+    text = (
+        "The acquisition images, which started at 03:51:03 UT of 21 Sep 2026 "
+        "(13h44m after the EP trigger) show the counterpart with the following "
+        "photometry:\n\ng = 22.6 +/- 0.1\n\n"
+        "Our observation started at 04:00:42 UT on 2026 September 21."
+    )
+    assert parse_acquisition_epoch(text) == (61304.16045138889, "2026-09-21T03:51:03Z")
+    # The general parser still reads the spectrum, which is why the specific
+    # one has to be consulted first.
+    assert parse_observation_epoch(text)[1] == "2026-09-21T04:00:42Z"
+
+
+def test_a_circular_without_an_acquisition_image_has_no_acquisition_epoch():
+    text = "We observed the field on 2026-09-21 04:00:42 UT with X-shooter."
+    assert parse_acquisition_epoch(text) is None

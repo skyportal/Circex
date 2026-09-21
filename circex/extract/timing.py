@@ -178,6 +178,31 @@ _OBS_EPOCH_REVERSED_RE = re.compile(
 )
 
 
+# A spectroscopy circular states two clocks: the acquisition image, which is
+# what the photometry it quotes was measured from, and the spectrum, which is
+# what the rest of the circular is about. "started at 03:51:03 UT of 21 Sep
+# 2026" -- time first, then the date, joined by "of" as often as "on".
+_ACQUISITION_RE = re.compile(
+    rf"\bacquisition\s+(?:image|frame|exposure)s?\b{_WITHIN_SENTENCE}"
+    rf"\b(?:at|from)\s+(?P<clock>\d{{1,2}}:\d{{2}}(?::\d{{2}}(?:\.\d+)?)?)"
+    rf"\s*(?:UTC?\b)?\s*(?:on|of)\s+(?P<date>{_DATE})",
+    re.IGNORECASE,
+)
+
+
+def parse_acquisition_epoch(text: str) -> tuple[float, str] | None:
+    """When the photometry came off an acquisition image, that image's time.
+
+    The magnitudes in a spectroscopy circular are measured on the acquisition
+    frame, minutes before the spectrum the circular goes on to describe. Timing
+    them from the spectrum is wrong by that gap.
+    """
+    match = _ACQUISITION_RE.search(text)
+    if match is None:
+        return None
+    return epoch_from_absolute(f"{match.group('date')} {match.group('clock')}")
+
+
 def parse_observation_epoch(text: str) -> tuple[float, str] | None:
     """First absolute observation datetime stated in prose, as (obs_mjd, obs_time).
 

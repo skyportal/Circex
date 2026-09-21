@@ -54,8 +54,13 @@ _NEARBY_OBJECT_RE = re.compile(
 _SPEC_RE = re.compile(r"\bspectroscop(?:ic|y|ically)\b", re.IGNORECASE)
 _PHOTO_RE = re.compile(r"\bphotomet(?:ric|ry|rically)\b", re.IGNORECASE)
 _HOST_RE = re.compile(r"\bhost(?:\s+galaxy)?\b", re.IGNORECASE)
-_EMISSION_RE = re.compile(r"\bemission\s+line", re.IGNORECASE)
-_ABSORPTION_RE = re.compile(r"\babsorption\s+line", re.IGNORECASE)
+# "absorption line" is one phrasing among several -- a trough, a feature, a
+# system. Bare "absorption" is not enough: Galactic absorption is extinction.
+_EMISSION_RE = re.compile(r"\bemission[- ](?:lines?|features?|components?)", re.IGNORECASE)
+_ABSORPTION_RE = re.compile(
+    r"\babsorption[- ](?:lines?|features?|troughs?|systems?|components?)",
+    re.IGNORECASE,
+)
 
 
 def _classify_measure(context: str, at: int | None = None) -> RedshiftMeasure | None:
@@ -116,38 +121,68 @@ def parse_redshift_bound(text: str) -> tuple[str, Span] | None:
     return phrase, span
 
 
+def context_around(text: str, start: int, end: int) -> str:
+    """The +/-200 characters a redshift is read in."""
+    return text[max(0, start - _CONTEXT_WINDOW) : min(len(text), end + _CONTEXT_WINDOW)]
+
+
+def disclaimed_at(text: str, start: int, end: int) -> str | None:
+    """The cue, if this position sits in a nearby-or-conditional-object context."""
+    match = _NEARBY_OBJECT_RE.search(context_around(text, start, end))
+    return match.group(0) if match else None
+
+
+def disclaimed_value(text: str, value: float) -> str | None:
+    """The cue, if every mention of `value` in `text` is one the circular hedges.
+
+    A circular can name a candidate host's catalogue redshift and the
+    transient's own; only a value that appears nowhere undisclaimed is dropped.
+    """
+    mentions = list(re.finditer(re.escape(f"{value:g}"), text))
+    if not mentions:
+        return None
+    cues = [disclaimed_at(text, m.start(), m.end()) for m in mentions]
+    return cues[0] if all(cues) else None
+
+
 def parse_redshift_with_span(text: str) -> tuple[Redshift, Span] | None:
-    """Same as parse_redshift, but also return a Span pointing at the z-match."""
-    match = _Z_RE.search(text) or _ALT_RE.search(text)
-    if not match:
-        return None
+    """Same as parse_redshift, but also return a Span pointing at the z-match.
 
-    z = float(match.group(1))
-    if z >= _MAX_PLAUSIBLE_Z:
-        return None  # a "z = 19.21" match is a z-band magnitude, not a redshift
-    err: float | None = None
-    if _Z_RE.match(match.group(0)) is not None:
-        try:
-            err_str = match.group(2)
-        except IndexError:
-            err_str = None
-        if err_str:
-            err = float(err_str)
+    Every match is considered, not just the first: photometry writes `z = 21.3`
+    for the Sloan band, and stopping there would miss the redshift below it.
+    """
+    # Each pattern is exhausted before the next is tried, as it always was:
+    # merging them by position promotes a superseded value over the correction
+    # that follows it ("the redshift of 1.7 ... was due to mis-identification
+    # ... the correct redshift is z=2.42").
+    matches = [*_Z_RE.finditer(text), *_ALT_RE.finditer(text)]
+    for match in matches:
+        z = float(match.group(1))
+        if z >= _MAX_PLAUSIBLE_Z:
+            continue  # a "z = 19.21" match is a z-band magnitude, not a redshift
+        err: float | None = None
+        if _Z_RE.match(match.group(0)) is not None:
+            try:
+                err_str = match.group(2)
+            except IndexError:
+                err_str = None
+            if err_str:
+                err = float(err_str)
 
-    ctx_start = max(0, match.start() - _CONTEXT_WINDOW)
-    ctx_end = min(len(text), match.end() + _CONTEXT_WINDOW)
-    context = text[ctx_start:ctx_end]
+        ctx_start = max(0, match.start() - _CONTEXT_WINDOW)
+        context = context_around(text, match.start(), match.end())
 
-    # Skip a redshift that the circular attributes to a nearby, explicitly
-    # unassociated object rather than to the transient.
-    if _NEARBY_OBJECT_RE.search(context):
-        return None
+        # Skip a redshift that the circular attributes to a nearby object, or
+        # associates only conditionally, rather than to the transient.
+        if _NEARBY_OBJECT_RE.search(context):
+            continue
 
-    redshift = Redshift(
-        redshift=z,
-        redshift_error=err,
-        redshift_measure=_classify_measure(context, match.start() - ctx_start),
-        redshift_type=_classify_type(context),
-    )
-    span = Span(start=match.start(), end=match.end(), snippet=match.group(0))
-    return redshift, span
+        redshift = Redshift(
+            redshift=z,
+            redshift_error=err,
+            redshift_measure=_classify_measure(context, match.start() - ctx_start),
+            redshift_type=_classify_type(context),
+        )
+        span = Span(start=match.start(), end=match.end(), snippet=match.group(0))
+        return redshift, span
+    return None

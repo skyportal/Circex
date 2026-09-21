@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from circex.extract.regex.redshift import parse_redshift
+from circex.extract.regex.redshift import disclaimed_value, parse_redshift
 
 
 def test_parse_simple_z() -> None:
@@ -127,3 +127,64 @@ def test_color_index_is_not_a_redshift() -> None:
 def test_standalone_redshift_still_matches_after_color_guard() -> None:
     r = parse_redshift("A spectroscopic z = 0.48 was measured from Halpha.")
     assert r is not None and r.redshift == 0.48
+
+
+def test_a_z_band_magnitude_does_not_hide_the_redshift_below_it():
+    # GCN 45675: photometry writes "z = 21.3" for the Sloan band, and the
+    # redshift follows further down. Stopping at the first match missed it.
+    text = (
+        "g = 22.6 +/- 0.1\nr = 21.6 +/- 0.1\nz = 21.3 +/- 0.2\n\n"
+        "We detect the Lyman-alpha absorption trough, all under a common "
+        "redshift of z = 3.582."
+    )
+    result = parse_redshift(text)
+    assert result is not None
+    assert result.redshift == 3.582
+
+
+def test_an_absorption_trough_is_absorption():
+    text = "the Lyman-alpha absorption trough, all under a common redshift of z = 3.582."
+    result = parse_redshift(text)
+    assert result is not None
+    assert result.redshift_type == "absorption"
+
+
+def test_galactic_absorption_is_not_a_redshift_type():
+    # "corrected for absorption" is extinction, not a line identification.
+    text = "The magnitudes are corrected for absorption. The host is at z = 0.42."
+    result = parse_redshift(text)
+    assert result is not None
+    assert result.redshift_type != "absorption"
+
+
+def test_a_conditionally_associated_redshift_is_reported_as_disclaimed():
+    # GCN 45669: a candidate host 52" away, offered with a chance-coincidence
+    # probability and an explicit "if associated".
+    text = (
+        "We note the presence of a bright spiral galaxy about 52 arcsec to the "
+        "east of the counterpart. We estimate a Pcc ~ 0.01, making it a "
+        "plausible candidate host galaxy. This galaxy has a spectroscopic "
+        "redshift of z = 0.0519 from the 2dF Galaxy Redshift Survey, "
+        "corresponding to a projected offset of approximately 55 kpc if "
+        "associated with the transient."
+    )
+    assert parse_redshift(text) is None
+    assert disclaimed_value(text, 0.0519) is not None
+
+
+def test_a_redshift_the_circular_stands_behind_is_not_disclaimed():
+    text = "all under a common redshift of z = 3.582. We infer this is the redshift."
+    assert disclaimed_value(text, 3.582) is None
+
+
+def test_a_superseded_redshift_does_not_outrank_its_correction():
+    # GCN 7389: the "z = X" form is exhausted before "redshift of X", so the
+    # retracted value quoted first does not win on position alone.
+    text = (
+        "The redshift of 1.7 previously quoted in GCN 7384 was due to "
+        "mis-identification of the line. Based on the detection of Ly-alpha, "
+        "SII, CIV, SiIV, etc. the correct redshift is z=2.42."
+    )
+    result = parse_redshift(text)
+    assert result is not None
+    assert result.redshift == 2.42

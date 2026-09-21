@@ -29,13 +29,15 @@ import re
 
 from circex.data.telescopes import canonicalize_telescope
 from circex.extract.protocol import Circular, Extractor
+from circex.extract.regex.redshift import disclaimed_value
 from circex.extract.regex.telescope import parse_telescope_with_span
-from circex.extract.timing import parse_observation_epoch
+from circex.extract.timing import parse_acquisition_epoch, parse_observation_epoch
 from circex.schema import (
     CircularExtraction,
     Classification,
     ExtractionMeta,
     PhotometryExt,
+    Redshift,
 )
 from circex.schema.span import Span
 
@@ -62,6 +64,41 @@ _ROUTING: dict[str, tuple[str, str | None]] = {
 _BAND_AS_FILTER_RE = re.compile(
     r"\d\s*(?:-|–|to)\s*\d.*\b(?:keV|MeV|GHz|MHz)\b|\b(?:keV|GHz|MHz)\b", re.I
 )
+
+
+def _settle_redshift(
+    fields: dict[str, object], body: str, regex_source: CircularExtraction
+) -> str | None:
+    """Reconcile the two readings of a redshift. Returns a note, if there is one.
+
+    The LLM is the better reader of the number, but it answers the question it
+    was asked and reports whatever redshift the circular contains. A catalogue
+    redshift for a galaxy the authors offer as a *candidate* host -- hedged with
+    a chance-coincidence probability, an offset, an "if associated" -- is not
+    the transient's, and the regex already knows how to spot that context.
+    """
+    redshift = fields.get("redshift")
+    if not isinstance(redshift, Redshift) or redshift.redshift is None:
+        return None
+
+    if (cue := disclaimed_value(body, redshift.redshift)) is not None:
+        fields["redshift"] = None
+        return (
+            f"redshift {redshift.redshift:g} dropped: stated only for a "
+            f"conditionally associated object ({cue!r})"
+        )
+
+    # Same number, two readings of what kind it is: the regex read the words
+    # beside it, so its answer stands where it has one.
+    from_regex = regex_source.redshift
+    if (
+        from_regex is not None
+        and from_regex.redshift == redshift.redshift
+        and from_regex.redshift_type is not None
+        and from_regex.redshift_type != redshift.redshift_type
+    ):
+        fields["redshift"] = redshift.model_copy(update={"redshift_type": from_regex.redshift_type})
+    return None
 
 
 def _regex_epoch(regex_source: CircularExtraction) -> tuple[float, str] | None:
@@ -93,7 +130,11 @@ def _prefer_stated_epoch(
     rows = fields.get("photometry")
     if not isinstance(rows, list) or not rows:
         return
-    stated = _regex_epoch(regex_source) or parse_observation_epoch(body)
+    # An acquisition-image time is stated *for the photometry*, so it outranks
+    # the epoch of whatever the circular went on to observe.
+    stated = (
+        parse_acquisition_epoch(body) or _regex_epoch(regex_source) or parse_observation_epoch(body)
+    )
     if stated is None:
         return
     mjd, iso = stated
@@ -263,6 +304,7 @@ class HybridExtractor(Extractor):
         _carry_telescope(fields, sources["regex"], circular.body)
         _prefer_stated_epoch(fields, circular.body, sources["regex"])
         _carry_xrf_subtype(fields, sources["regex"])
+        redshift_note = _settle_redshift(fields, circular.body, sources["regex"])
 
         # Retraction is read from the subject line, so it is the same either way
         # and never routed; without this the merged result always reads False.
@@ -273,5 +315,6 @@ class HybridExtractor(Extractor):
             extractor=self.extractor_id,
             model_id=getattr(self._llm, "model_id", None),
             prompt_version=getattr(self._llm, "prompt_version", None),
+            notes=[redshift_note] if redshift_note else [],
         )
         return CircularExtraction(**fields)  # type: ignore[arg-type]
