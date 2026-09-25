@@ -29,6 +29,7 @@ import re
 
 from circex.data.telescopes import canonicalize_telescope
 from circex.extract.protocol import Circular, Extractor
+from circex.extract.regex.mag_table import infer_bandpass_for
 from circex.extract.regex.redshift import disclaimed_value
 from circex.extract.regex.telescope import parse_telescope_with_span
 from circex.extract.timing import parse_acquisition_epoch, parse_observation_epoch
@@ -240,6 +241,26 @@ def _rescue_structured_photometry(
     fields["photometry"] = kept + structured
 
 
+def _fill_bandpasses(fields: dict[str, object]) -> None:
+    """Name the bandpass for any row that states a filter, in place.
+
+    The LLM owns photometry and writes the filter it read, not a canonical
+    bandpass: rows arrive as `filter="J"` with `bandpass=None`. The regex
+    row-builders crosswalk every filter they recognise, so the mapping exists
+    and is simply never reached for an LLM row. A magnitude with no bandpass
+    cannot be plotted or fitted, which makes the row not worth having.
+    """
+    rows = fields.get("photometry")
+    if not isinstance(rows, list):
+        return
+    for row in rows:
+        if getattr(row, "bandpass", None) is not None:
+            continue
+        band = infer_bandpass_for(getattr(row, "filter", None), getattr(row, "telescope", None))
+        if band is not None:
+            row.bandpass = band
+
+
 def _present(value: object) -> bool:
     """A field counts as populated when it is neither None nor an empty list."""
     return value is not None and value != []
@@ -301,6 +322,7 @@ class HybridExtractor(Extractor):
                 provenance.update(_provenance_for(sources[chosen], field))
 
         _rescue_structured_photometry(fields, sources["regex"])
+        _fill_bandpasses(fields)
         _carry_telescope(fields, sources["regex"], circular.body)
         _prefer_stated_epoch(fields, circular.body, sources["regex"])
         _carry_xrf_subtype(fields, sources["regex"])

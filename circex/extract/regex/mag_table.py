@@ -334,9 +334,79 @@ _BANDPASS_CROSSWALK: Final[dict[str, str]] = {
 }
 
 
+# A filter name alone does not always name a band. Swift/UVOT's `v`, `b` and
+# `u` are its own filters rather than Bessell's or Sloan's, and an instrument
+# that observes in one band states the band nowhere: a Swift/XRT row says only
+# "XRT". Both are settled by the telescope beside the filter.
+_UVOT_BANDPASSES = {
+    "v": "uvot::v",
+    "b": "uvot::b",
+    "u": "uvot::u",
+    "w1": "uvot::uvw1",
+    "w2": "uvot::uvw2",
+    "m2": "uvot::uvm2",
+    "uvw1": "uvot::uvw1",
+    "uvw2": "uvot::uvw2",
+    "uvm2": "uvot::uvm2",
+    "white": "uvot::white",
+    "white_fc": "uvot::white",
+}
+
+# Instruments with a single band, named as SkyPortal registers them. Keyed by a
+# substring of the telescope as circulars write it.
+_SINGLE_BAND_INSTRUMENTS = (
+    ("swift/xrt", "swiftxrt"),
+    ("swift xrt", "swiftxrt"),
+    ("xrt", "swiftxrt"),
+    ("nicer", "nicerxti"),
+    ("ep-wxt", "epwxt"),
+    ("ep/wxt", "epwxt"),
+    ("wxt", "epwxt"),
+    ("ep-fxt", "epfxt"),
+    ("ep/fxt", "epfxt"),
+    ("fxt", "epfxt"),
+    ("svom/mxt", "svommxt"),
+    ("mxt", "svommxt"),
+    ("eclairs", "svomeclairs"),
+    ("svom/grm", "svomgrm"),
+    ("grm", "svomgrm"),
+)
+
+# SVOM's visible telescope has two, told apart by the filter.
+_SVOM_VT_BANDPASSES = {"b": "svomvtb", "r": "svomvtr"}
+
+
 def infer_bandpass(filter_name: str) -> str | None:
     """Map a recognized filter token to its canonical bandpass name, or None."""
     return _BANDPASS_CROSSWALK.get(filter_name)
+
+
+def infer_bandpass_for(filter_name: str | None, telescope: str | None) -> str | None:
+    """The bandpass a row states, reading the telescope where the filter is
+    ambiguous or absent.
+
+    The telescope is consulted first: `u` on Swift/UVOT is uvot::u, not sdssu,
+    and the crosswalk cannot tell them apart.
+    """
+    scope = (telescope or "").lower()
+    name = (filter_name or "").strip()
+
+    if "uvot" in scope:
+        band = _UVOT_BANDPASSES.get(name.lower())
+        if band:
+            return band
+    if "svom" in scope and "vt" in scope:
+        band = _SVOM_VT_BANDPASSES.get(name.lower())
+        if band:
+            return band
+    for fragment, band in _SINGLE_BAND_INSTRUMENTS:
+        if fragment in scope or fragment == name.lower():
+            return band
+
+    if not name:
+        return None
+    # A primed Sloan filter is the unprimed one: r' and r are the same band.
+    return infer_bandpass(name) or infer_bandpass(name.rstrip("'\u2032"))
 
 
 # Optical magnitudes run roughly 5 to 30; the deepest reported limits sit just
