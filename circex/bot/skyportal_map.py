@@ -50,7 +50,7 @@ def position_error_deg(extraction: CircularExtraction) -> float | None:
 
 
 def _obj_id(extraction: CircularExtraction) -> str | None:
-    """SkyPortal source id from the event name (spaces removed). None if unnamed.
+    """SkyPortal source id from the event name. None if unnamed.
 
     Prefers an AT/optical designation over a bare GRB/GW trigger when the
     extraction carries a list (the optical name is what SkyPortal keys on).
@@ -61,14 +61,14 @@ def _obj_id(extraction: CircularExtraction) -> str | None:
     names = name if isinstance(name, list) else [name]
     optical = [n for n in names if re.match(r"(?i)^(AT|SN)\s?\d", n)]
     chosen = optical[0] if optical else (names[0] if names else None)
-    return re.sub(r"\s+", "", chosen) if chosen else None
+    return _as_source_id(chosen)
 
 
 def _as_source_id(name: str | None) -> str | None:
     """A designation as SkyPortal keys it: "AT 2026abfp" -> "AT2026abfp"."""
     if not name:
         return None
-    return re.sub(r"\s+", "", name.strip()) or None
+    return re.sub(r"[^A-Za-z0-9_;:+.-]", "", name) or None
 
 
 @dataclass(frozen=True)
