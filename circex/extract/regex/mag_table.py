@@ -831,6 +831,8 @@ def _classify_pipe_columns(cells: list[str]) -> dict[int, str]:
             # "_" is a word character, so the separator set is spelt out rather
             # than left to \b, which never fires inside "mag_err".
             roles[i] = "mag_err"
+        elif re.search(r"\blim(?:it|iting)?\b|maglim", t):
+            roles[i] = "limit"
         elif "mag" in t:  # mag / magnitude / abmag / mag (ab)
             roles[i] = "mag"
         elif re.search(r"\bra\b", t):
@@ -916,6 +918,10 @@ def _parse_pipe_row(
         bound = re.fullmatch(r"[><]\s*(\d{1,2}\.\d{1,4})", by.get("mag", "").strip())
         if bound:
             limit = float(bound.group(1))
+    if limit is None:
+        stated = re.fullmatch(r"[~><]?\s*(\d{1,2}\.\d{1,4})", by.get("limit", "").strip())
+        if stated:
+            limit = float(stated.group(1))
     if mag is None and limit is None:
         return None
 
@@ -998,9 +1004,9 @@ def parse_pipe_table_with_spans(
             i += 1
             continue
         roles = _classify_pipe_columns(_pipe_cells(lines[i]))
-        # Header needs a mag column plus at least one more recognized column
+        # Header needs a mag or limit column plus at least one more recognized column
         # (filter / time) — guards against a stray prose line with a "|".
-        if "mag" not in roles.values() or len(roles) < 2:
+        if not {"mag", "limit"} & set(roles.values()) or len(roles) < 2:
             i += 1
             continue
         j = i + 1

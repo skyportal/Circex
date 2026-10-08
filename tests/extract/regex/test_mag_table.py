@@ -623,6 +623,20 @@ def test_a_pipe_table_states_a_limit_as_an_inequality():
     assert all(r.mag is None for r in rows)
 
 
+def test_a_pipe_table_column_headed_as_a_limit_holds_limits():
+    """GCN 45860: Xinglong limits in an "Upper limit mag" column."""
+    from circex.extract.regex.mag_table import parse_pipe_table_with_spans
+
+    body = (
+        "We obtained g-band frames.\n"
+        "Obs. No. |    Start Time (UTC) |  End Time (UTC)     |Upper limit mag| Telescope\n"
+        "   1     | 2026-10-07 15:27:53 | 2026-10-07 15:43:05 | 20.66 | Xinglong 0.8-m\n"
+    )
+    (row,) = [p for p, _ in parse_pipe_table_with_spans(body)]
+    assert row.mag is None
+    assert row.limiting_mag == 20.66
+
+
 def test_a_pipe_magnitude_is_still_read_as_a_detection():
     from circex.extract.regex.mag_table import parse_pipe_table_with_spans
 
