@@ -79,6 +79,16 @@ def test_llama_server_does_not_cache_on_transport_failure(tmp_path: Path) -> Non
     assert cache.count() == 0  # but nothing was persisted
 
 
+def test_llama_server_fails_soft_on_a_reply_outside_the_schema(tmp_path: Path) -> None:
+    reply = json.dumps({"time_offsets": [{"value": 30, "unit": "min"}], "provenance": {}})
+    cache = LLMCache(tmp_path / "llm.sqlite")
+    ext = LlamaServerExtractor(cache=cache, session=_FakeSession(reply), structured=False)
+    result = ext.extract(Circular(circular_id=45840, subject="", body="30 min after T0"))
+
+    assert result.circular_id == 45840
+    assert cache.count() == 0
+
+
 def test_llama_server_binds_body_observation_epoch_to_untimed_rows() -> None:
     """A table row with no date column gets obs_mjd from a single body-level
     observation time, matching the regex extractor (GCN 45198 regression)."""
