@@ -128,7 +128,9 @@ def test_provenance_lands_in_photometry_altdata() -> None:
     ex = CircularExtraction(
         circular_id=42,
         event=Event(event_name="AT2026xyz"),
-        photometry=[PhotometryExt(filter="r", bandpass="sdssr", mag=20.4, obs_mjd=61199.0)],
+        photometry=[
+            PhotometryExt(filter="r", bandpass="sdssr", mag=20.4, mag_error=0.1, obs_mjd=61199.0)
+        ],
         provenance={"photometry[0]": Span(start=0, end=5, snippet="r=20.4")},
         extraction_meta=_meta(),
     )
@@ -143,7 +145,12 @@ def _photometry_ex(telescope: str | None = None) -> CircularExtraction:
         event=Event(event_name="AT2026xyz"),
         photometry=[
             PhotometryExt(
-                filter="r", bandpass="sdssr", mag=20.4, obs_mjd=61199.0, telescope=telescope
+                filter="r",
+                bandpass="sdssr",
+                mag=20.4,
+                mag_error=0.1,
+                obs_mjd=61199.0,
+                telescope=telescope,
             )
         ],
         extraction_meta=_meta(),
@@ -182,7 +189,9 @@ def test_dry_run_poster_sends_nothing_and_plans_in_order() -> None:
         circular_id=1,
         event=Event(event_name="AT2026xyz"),
         localization=Localization(ra=10.0, dec=20.0),
-        photometry=[PhotometryExt(filter="r", bandpass="sdssr", mag=20.4, obs_mjd=61199.0)],
+        photometry=[
+            PhotometryExt(filter="r", bandpass="sdssr", mag=20.4, mag_error=0.1, obs_mjd=61199.0)
+        ],
         redshift=Redshift(redshift=0.5),
         extraction_meta=_meta(),
     )
@@ -233,7 +242,12 @@ def test_unrecognized_filter_falls_back_to_row_bandpass() -> None:
         event=Event(event_name="AT2026xyz"),
         photometry=[
             PhotometryExt(
-                filter="Zband", bandpass="ztfg", mag_system="AB", mag=20.0, obs_mjd=61199.83
+                filter="Zband",
+                bandpass="ztfg",
+                mag_system="AB",
+                mag=20.0,
+                mag_error=0.1,
+                obs_mjd=61199.83,
             )
         ],
         extraction_meta=_meta(),
@@ -282,6 +296,22 @@ def test_row_with_neither_mag_nor_limit_is_unpostable() -> None:
     a = to_actions(ex, default_instrument_id=4)
     assert a.photometry == []
     assert a.skipped_rows == 1
+
+
+def test_mag_without_error_is_dropped_and_the_rest_posted() -> None:
+    ex = CircularExtraction(
+        circular_id=45857,
+        event=Event(event_name="EP261006a"),
+        localization=Localization(ra=1.0, dec=2.0),
+        photometry=[
+            PhotometryExt(filter="uvw2", mag=18.4, obs_mjd=61320.74),
+            PhotometryExt(filter="g", mag=19.69, mag_error=0.04, obs_mjd=61320.74),
+        ],
+        extraction_meta=_meta(),
+    )
+    a = to_actions(ex, default_instrument_id=4)
+    assert [p.mag for p in a.photometry] == [19.69]
+    assert a.skipped_reasons == ("no mag error",)
 
 
 def test_poster_continue_on_error(monkeypatch) -> None:
