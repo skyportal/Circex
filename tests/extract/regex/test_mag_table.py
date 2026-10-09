@@ -637,6 +637,19 @@ def test_a_pipe_table_column_headed_as_a_limit_holds_limits():
     assert row.limiting_mag == 20.66
 
 
+def test_a_pipe_table_telescope_name_column_is_not_the_object():
+    """GCN 45877: a "Telescope Name" column read as each row's object."""
+    from circex.extract.regex.mag_table import parse_pipe_table_with_spans
+
+    body = (
+        "Obs. No. | Time (UTC) | Exposure Time (s) | Filter | Apparent mag (AB) | Telescope Name\n"
+        "  1 | 2026-10-08T15:14:46 | 3x300 s | g | 18.49 ± 0.04 | 2.16-m telescope\n"
+    )
+    (row,) = [p for p, _ in parse_pipe_table_with_spans(body)]
+    assert row.object_name is None
+    assert row.mag == 18.49
+
+
 def test_a_pipe_magnitude_is_still_read_as_a_detection():
     from circex.extract.regex.mag_table import parse_pipe_table_with_spans
 
