@@ -33,7 +33,7 @@ def test_row_without_a_bandpass_is_dropped_and_counted():
 
 def test_row_with_a_known_filter_survives():
     actions = to_actions(
-        _extraction(filter="r", obs_mjd=61195.0, mag=19.0, limiting_mag=20.0),
+        _extraction(filter="r", obs_mjd=61195.0, mag=19.0, mag_error=0.1, limiting_mag=20.0),
         default_instrument_id=4,
     )
     assert len(actions.photometry) == 1

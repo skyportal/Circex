@@ -388,6 +388,18 @@ def _row_to_point(
         dropped.append(reason)
         return None
 
+    if row.mag is not None and row.mag_error is None:
+        # SkyPortal rejects a magnitude without its error, and the circular with it.
+        log.info(
+            "photometry_row_dropped",
+            circular_id=extraction.circular_id,
+            reason="no mag error",
+            filter=row.filter,
+            telescope=row.telescope,
+        )
+        dropped.append("no mag error")
+        return None
+
     # SkyPortal's photometry endpoint REQUIRES a non-null limiting_mag for
     # mag-space points. Circulars often report a detection with no explicit
     # per-point limit, so fall back to the detection mag itself — a conservative,
