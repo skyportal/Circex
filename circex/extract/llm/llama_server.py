@@ -184,7 +184,15 @@ class LlamaServerExtractor(Extractor):
                 "model_id": self._model_id,
                 "notes": llm_notes,
             }
-            chunk_results.append(CircularExtraction.model_validate(payload))
+            try:
+                chunk_results.append(CircularExtraction.model_validate(payload))
+            except ValidationError as exc:
+                log.warning(
+                    "llama_server_extract_failed",
+                    circular_id=circular.circular_id,
+                    error=str(exc)[:300],
+                )
+                had_error = True
 
         latency_ms = (time.perf_counter() - started) * 1000.0
         meta = ExtractionMeta(
