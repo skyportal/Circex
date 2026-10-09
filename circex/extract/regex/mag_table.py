@@ -839,7 +839,7 @@ def _classify_pipe_columns(cells: list[str]) -> dict[int, str]:
             roles[i] = "ra"
         elif re.search(r"\bdec\b", t):
             roles[i] = "dec"
-        elif "name" in t:  # "ZTF Name" / "IAU Name" — counterpart designation
+        elif "name" in t and not re.search(r"telescope|instrument|observatory|facility", t):
             # The IAU designation is the object's name; a survey's internal one
             # is an alias for it, so the two columns are kept apart.
             roles[i] = "iau_name" if re.search(r"\biau\b|\btns\b", t) else "name"
